@@ -197,7 +197,11 @@ GetObjFcn <- function(iqr_formula, taus, data, qrMethod) {
 		data[[response_varname]] <- Y - D %*% alpha
 		rq_fit <- rq(inv_formula,tau,data,method=qrMethod)
 		gamma <- rq_fit$coef[2 : (2 + dim_inst_var - 1)]
-		return(gamma)
+		cov_mat <- summary.rq(rq_fit, se = "ker", covariance = TRUE)$cov
+		cov_mat <- cov_mat[(2 : (2 + dim_inst_var - 1)),(2 : (2 + dim_inst_var - 1))]
+		wald_stat <- t(gamma) %*% solve(cov_mat) %*% gamma
+		return(wald_stat)
+		#return(gamma)
 	}
 	return(objFcn)
 }
@@ -235,7 +239,7 @@ ivqr.vc <- function(object,covariance,bd_rule="Silver") {
 	se <- matrix(NA,kd,length(taus))
 	cov_mats <- array(NA,dim = c(kd,kd,length(taus)))
 	J_array <- array(NA,dim = c(kd,kd,length(taus)))
-	for( tau_index in 1:length(taus)){
+	for(tau_index in 1:length(taus)){
 		e <- residuals[,tau_index]
 
 		# Silverman's rule of thumb
@@ -360,6 +364,11 @@ print.ivqr <- function(x, ...) {
 
 	}
 }
+
+weakIVtest <- function(object, variable = NULL, a_0, size){
+
+}
+
 print.ivqr_ks <- function(x, ...) {
 	print(x$ks_stat)
 	print(x$critical_value)
