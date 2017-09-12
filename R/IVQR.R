@@ -118,7 +118,8 @@ ivqr <- function(formula, taus=0.5, data, grid, gridMethod="Default", ivqrMethod
 	fit$data <- data
 	fit$dim_d_d_k <- c(ncol(D),ncol(D),ncol(X))
 	fit$n <- nrow(X)
-	fit$grid_value <- grid_value
+	fit$obj_fcn <- grid_value
+	fit$grid <- grid
 	PSI <- cbind(PHI, X)
 	DX <- cbind(D,X)
 
@@ -372,8 +373,23 @@ print.ivqr <- function(x, ...) {
 	}
 }
 
-weakIVtest <- function(object, variable = NULL, a_0, size){
+weakIVtest <- function(object, size = 0.05){
 
+	grid <- object$grid
+	dim_d <- object$dim_d_d_k[1]
+	obj_fcn <- object$obj_fcn
+	taus <- object$taus
+
+	#!
+	if (dim_d > 1) stop("weakIVtest() is only implented for single endogenous variable")
+	critical_value <- qchisq((1 - size), dim_d)
+	grid_mat <- replicate(length(taus),grid)
+	grid_mat[obj_fcn > critical_value] <- NA
+	result <- list()
+	result$CI <- grid_mat
+	result$taus <- taus
+	class(result) <- "ivqr_weakIV"
+	return(result)
 }
 
 print.ivqr_ks <- function(x, ...) {
@@ -389,4 +405,11 @@ plot.ivqr <- function(object){
 	plot(taus,object$coef$endg_var,ylim=c(0,30000),type='n')
 	polygon(c(taus,rev(taus)),c(up_bdd,rev(lw_bdd)),col='grey')
 	lines(taus,object$coef$endg_var,ylim=c(0,30000))
+}
+
+plot.ivqr_weakIV <- function(object){
+	warning("weakIVtest: CI can be not-convex")
+	CI <- object$CI
+	taus <- object$taus
+	plot(rep(taus,nrow(CI)),c(t(CI)))
 }
