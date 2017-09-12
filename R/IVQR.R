@@ -93,7 +93,7 @@ ivqr <- function(formula, taus=0.5, data, grid, gridMethod="Default", ivqrMethod
 
 	fitted <- matrix(0,nrow(X),length(taus))
 	residuals <- matrix(0,nrow(X),length(taus))
-
+	grid_value <- matrix(0,length(grid),length(taus))
 	for (i in 1:length(taus)) {
 		print(paste("Now at tau=",taus[i]))
 		ivqr_est <- ivqr.fit(iqr_formula, tau = taus[i], data, grid, gridMethod,
@@ -104,6 +104,7 @@ ivqr <- function(formula, taus=0.5, data, grid, gridMethod="Default", ivqrMethod
 		coef$exog_var[,i] <- ivqr_est$coef_exog_var
 		residuals[,i] <- ivqr_est$residuals
 		fitted[,i] <- ivqr_est$fitted
+		grid_value[,i] <- ivqr_est$grid_value
 	}
 
 	# Preparing for standard erros
@@ -117,6 +118,7 @@ ivqr <- function(formula, taus=0.5, data, grid, gridMethod="Default", ivqrMethod
 	fit$data <- data
 	fit$dim_d_d_k <- c(ncol(D),ncol(D),ncol(X))
 	fit$n <- nrow(X)
+	fit$grid_value <- grid_value
 	PSI <- cbind(PHI, X)
 	DX <- cbind(D,X)
 
@@ -147,7 +149,9 @@ ivqr.fit <- function(iqr_formula, tau, data, grid, gridMethod, ivqrMethod, qrMet
 ivqr.fit.iqr <- function(iqr_formula, tau, data, grid, gridMethod, qrMethod){
 	# Grid Search
 	objFcn <- GetObjFcn(iqr_formula,tau,data,qrMethod)
-	coef_endg_var <- GridSearch(objFcn,tau,grid)
+	grid_search <- GridSearch(objFcn,tau,grid)
+	coef_endg_var <- grid_search$coef_endg_var
+	grid_value <- grid_search$grid_value
 
 	# reg again to get theta = (beta,gamma) and residuals
 	inv_formula <- formula(iqr_formula,lhs=1,rhs=c(2,3),collapse=TRUE)
@@ -174,7 +178,8 @@ ivqr.fit.iqr <- function(iqr_formula, tau, data, grid, gridMethod, qrMethod){
 	residuals <- Y - fitted
 
 	return(list(coef_endg_var = coef_endg_var, coef_exog_var = coef_exog_var,
-		coef_inst_var = coef_inst_var, fitted = fitted, residuals = residuals))
+		coef_inst_var = coef_inst_var, fitted = fitted, residuals = residuals,
+		grid_value = grid_value))
 }
 
 GetObjFcn <- function(iqr_formula, taus, data, qrMethod) {
@@ -208,20 +213,22 @@ GetObjFcn <- function(iqr_formula, taus, data, qrMethod) {
 
 GridSearch <- function(objFcn,tau,grid){
 	if (is.vector(grid)) {
-		gridValue <- rep(NA,length(grid))
+		grid_value <- rep(NA,length(grid))
 		for (i in 1:length(grid)) {
-			gridValue[i] <- objFcn(tau,grid[i])
+			grid_value[i] <- objFcn(tau,grid[i])
 		}
-		endg_var <- grid[which.min(abs(gridValue))]
-		return(endg_var)
+		output <- list()
+		output$coef_endg_var <- grid[which.min(abs(grid_value))]
+		output$grid_value <- grid_value
+		return(output)
 	} else if (is.matrix(grid)) {
-		gridValue <- marix(NA,length(grid[1,]),length(grid[2,]))
+		grid_value <- marix(NA,length(grid[1,]),length(grid[2,]))
 		for (i in 1:length(grid[1])) {
 			for (j in 1:length(grid[2])) {
 				alpha <- c(grid[1,i],grid[2,i])
-				gridValue[i] <- objFcn(tau,alpha)
+				grid_value[i] <- objFcn(tau,alpha)
   			}
-			endg_var <- grid[which.min(abs(gridValue))]
+			endg_var <- grid[which.min(abs(grid_value))]
 			return(endg_var)
 		}
 	}
