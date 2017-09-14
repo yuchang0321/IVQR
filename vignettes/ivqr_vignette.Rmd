@@ -1,0 +1,63 @@
+---
+title: "Instrument Variable Quantile Regression"
+author: "Yu-Chang Chen"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Instrument Variable Quantile Regression}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+Instrument variable quantile regression (Chernozhukov and Hansen, 2005) provides the ability to study heterogeneous impacts of variables and serves as a valuable tool in empirical analysis in ecnoomics, where endogeneity commonly arises. To facilitate its power and make ease for emprical practitioners, I develop a R package implementing the corresponding estimation procedure and Wald test (Chernozhukov and Hansen, 2006), inference on quantile process with score subsampling (Chernozhukov and Hansen, 2006), and weak IV robust inference (Chernozhukov and Hansen, 2008). Also, I replicate the emprirical examples in these papers to demonstrate its usage.
+
+## Introduction
+
+In the seminal paper, Chernozhukov and Hansen (2005) propose an instrumental variable extension of quantile regression. The model, in a potential outcome framework, can be expressed as:
+\[Y := Y_D,\]
+where $Y$ and D denotes the outcome variable and the treatment variable(s). The object of interet, quantile treatment effect (QTE), is the $\tau$-th quantiles of potential outcomes under various potential treatment states $d$, conditional on observed characteristics $X = x$, denoted as
+\[QTE = q(\tau,d_1,x) -  q(\tau,d_0,x),\]
+\[q(\tau,d_0,x) = Q_{Y_d}(\tau|x)\]
+
+Let $Z$ denote the instrument variable(s). Under the main assumption in their model, the quantile treatment effects are non-parametrically identified by the following moment conditions:
+\[ P[Y < q(\tau,D,X)|X,Z] = \tau, \forall \tau \in (0,1)  \]
+However, the moment conditions are non-convex and non-smooth, making the estimation computationally difficult in problems with a practically relevant size.
+
+Several approaches have been developed to overcome these challenges. The most popular method is the inverse quantile method proposed by Chernozukov and Hansen (2006), which is what I implement in the package. It focues on linear-in-parameter structure quantile models:
+\[q(\tau,d,x) = d\alpha_0(\tau) + x' \beta_0(\tau)\]
+The method circumvents the difficulty by observing that the following restrictions on the conditional quantile function:
+\[ Q_{Y-D'\alpha_0}(\tau|X,Z) = X'\beta_0 + Z'\gamma_0 \space with \space \gamma_0 = 0 \]
+
+can be derived from the moment condition. As a result, the estimation problem amounts to finding the coefficeints that satisfies the restriction, and this can be done by grid searching over the possible values of $\alpha$. Each evaluation at a point of the grid only involves a quantile regression, which can be done quite efficiently with the interior point-preprocessing methods introduced by Portnoy and Koenker (1997). The method is most useful when the dimension of $\alpha$ is small, and it's usually the case.
+
+## Estimation of the Coefficients
+
+In this section, we discuss how to estimate the QTE function with the package. As it's most easily explained with an example, I'll replicate the 401k empirical analysis done in (Chernozhukov and Hansen, 2004). First we load the data,
+
+
+
+## Figures
+
+The figure sizes have been customised so that you can easily put two images side-by-side. 
+
+```{r, fig.show='hold'}
+plot(1:10)
+plot(10:1)
+```
+
+You can enable figure captions by `fig_caption: yes` in YAML:
+
+    output:
+      rmarkdown::html_vignette:
+        fig_caption: yes
+
+Then you can use the chunk option `fig.cap = "Your figure caption."` in **knitr**.
+
+## More Examples
+
+You can write math expressions, e.g. $Y = X\beta + \epsilon$, footnotes^[A footnote here.], and tables, e.g. using `knitr::kable()`.
+
+```{r, echo=FALSE, results='asis'}
+knitr::kable(head(mtcars, 10))
+```
+
