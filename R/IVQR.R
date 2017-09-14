@@ -33,15 +33,20 @@ ivqr <- function(formula, taus=0.5, data, grid, gridMethod="Default", ivqrMethod
 	# 		D_hat[,i] <- XZ %*% solve(t(XZ) %*% XZ) %*% t(XZ) %*% D[,i]
 	# 	}
 	# }
+
 	D_hat <- D
 	for (i in 1:dim(D)[2]){
-		D_hat[,i] <- XZ %*% solve(t(XZ) %*% XZ) %*% t(XZ) %*% D[,i]
+		beta <- solve(crossprod(XZ), crossprod(XZ,D[,i]))
+		D_hat[,i] <- XZ %*% beta
 	}
+
 	#! ---
 	if (any(grepl(".ivqr_dhat",colnames(data)))){
 		stop("No names of variables in the data set should include .ivqr_dhat")
 	}
 	dhat_formula <- c("~")
+
+	copy_data <- data
 	for (i in 1:dim(D)[2]){
 		data[,paste(".ivqr_dhat",i,sep="")] <- D_hat[,i]
 		dhat_formula <- cbind(dhat_formula,paste(".ivqr_dhat",i,sep=""))
@@ -91,13 +96,27 @@ ivqr <- function(formula, taus=0.5, data, grid, gridMethod="Default", ivqrMethod
 	}
 	# ---
 
-	fitted <- matrix(0,nrow(X),length(taus))
-	residuals <- matrix(0,nrow(X),length(taus))
-	grid_value <- matrix(0,length(grid),length(taus))
+	fitted <- matrix(NA,nrow(X),length(taus))
+	residuals <- matrix(NA,nrow(X),length(taus))
+	grid_value <- matrix(NA,length(grid),length(taus))
 	for (i in 1:length(taus)) {
 		print(paste("Now at tau=",taus[i]))
 		ivqr_est <- ivqr.fit(iqr_formula, tau = taus[i], data, grid, gridMethod,
 			ivqrMethod, qrMethod)
+
+		if (is.na(ivqr_est)){
+
+			if (i == 1 & length(taus) > 1){
+				new_taus <- taus[2:length(taus)]
+			} else if ( i < length(taus)){
+				new_taus <- c(taus[1:(i-1)],taus[(i+1):length(taus)])
+			} else if (i == length(taus)){
+				new_taus <- taus[1:(length(taus) - 1)]
+			}
+			return(ivqr(formula = formula(formula), taus= new_taus,
+				data = copy_data, grid = grid, gridMethod = gridMethod,
+				ivqrMethod = ivqrMethod, qrMethod = qrMethod))
+		}
 
 		coef$endg_var[,i] <- ivqr_est$coef_endg_var
 		coef$inst_var[,i] <- ivqr_est$coef_inst_var
@@ -105,8 +124,8 @@ ivqr <- function(formula, taus=0.5, data, grid, gridMethod="Default", ivqrMethod
 		residuals[,i] <- ivqr_est$residuals
 		fitted[,i] <- ivqr_est$fitted
 		grid_value[,i] <- ivqr_est$grid_value
-	}
 
+	}
 	# Preparing for standard erros
 	fit <- list()
 	class(fit) <- "ivqr"
@@ -120,12 +139,17 @@ ivqr <- function(formula, taus=0.5, data, grid, gridMethod="Default", ivqrMethod
 	fit$n <- nrow(X)
 	fit$obj_fcn <- grid_value
 	fit$grid <- grid
+	fit$copy_data <- copy_data
+	fit$gridMethod <- gridMethod
+	fit$ivqrMethod <- ivqrMethod
+	fit$qrMethod <- qrMethod
 	PSI <- cbind(PHI, X)
 	DX <- cbind(D,X)
 
 	fit$DX <- DX
 	fit$PSI <- PSI
 
+	print("Estimating se")
 	vc <- ivqr.vc(fit,covariance,"Silver")
 
 	#plot.ivqr(fit)
@@ -151,6 +175,7 @@ ivqr.fit.iqr <- function(iqr_formula, tau, data, grid, gridMethod, qrMethod){
 	# Grid Search
 	objFcn <- GetObjFcn(iqr_formula,tau,data,qrMethod)
 	grid_search <- GridSearch(objFcn,tau,grid)
+	if (is.na(grid_search)) return(NA)
 	coef_endg_var <- grid_search$coef_endg_var
 	grid_value <- grid_search$grid_value
 
@@ -201,7 +226,13 @@ GetObjFcn <- function(iqr_formula, taus, data, qrMethod) {
 	# Is not passing data, Y, D, response_varname Ok?
 	objFcn <- function(tau, alpha){
 		data[[response_varname]] <- Y - D %*% alpha
-		rq_fit <- rq(inv_formula,tau,data,method=qrMethod)
+		  rq_fit <- tryCatch({
+			rq(inv_formula,tau,data,method=qrMethod)
+		  },
+		  error=function(e){
+		  	cat("ERROR :",conditionMessage(e), "\n")
+		  	return(NA)})
+		if (is.na(rq_fit)) return(NA)
 		gamma <- rq_fit$coef[2 : (2 + dim_inst_var - 1)]
 		cov_mat <- summary.rq(rq_fit, se = "ker", covariance = TRUE)$cov
 		cov_mat <- cov_mat[(2 : (2 + dim_inst_var - 1)),(2 : (2 + dim_inst_var - 1))]
@@ -217,6 +248,11 @@ GridSearch <- function(objFcn,tau,grid){
 		grid_value <- rep(NA,length(grid))
 		for (i in 1:length(grid)) {
 			grid_value[i] <- objFcn(tau,grid[i])
+			if (is.na(grid_value[i])) {
+				print(paste("Error happened at tau=", tau))
+				return(NA)
+			}
+
 		}
 		output <- list()
 		output$coef_endg_var <- grid[which.min(abs(grid_value))]
@@ -247,22 +283,30 @@ ivqr.vc <- function(object,covariance,bd_rule="Silver") {
 	se <- matrix(NA,kd,length(taus))
 	cov_mats <- array(NA,dim = c(kd,kd,length(taus)))
 	J_array <- array(NA,dim = c(kd,kd,length(taus)))
+	print("Done with Preparing")
 	for(tau_index in 1:length(taus)){
 		e <- residuals[,tau_index]
-
 		# Silverman's rule of thumb
+
 		if ( bd_rule == "Silver" ) {
 			h <- 1.364 * ( (2*sqrt(pi)) ^ (-1/5) ) * std(e) * ( n ^ (-1/5) )
 		}
 
 		S <- (taus[tau_index] - taus[tau_index] ^ 2) * (1 / n) * tPSI_PSI
-		kernel_mat <- diag(as.numeric( abs(e) < h ))
+		print("Done with S")
+		kernel <- c(as.numeric( abs(e) < h ))
+		print("Done with kernel")
 
-		J <- (1 / (2 * n * h)) * t(kernel_mat %*% PSI) %*% DX
+		J <- (1 / (2 * n * h)) * t(kernel * PSI) %*% DX
 		J_array[,,tau_index] <- J
+		print("Done with J")
+		#invJ <- chol2inv(chol(J))
 		invJ <- solve(J)
+		print("Done with invJ")
+
 
 		cov_mats[,,tau_index] <- (1/n) * invJ %*% S %*% invJ
+		print("Done with multiplication")
 		se[,tau_index] <- diag(cov_mats[,,tau_index]) ^ (1/2)
 	}
 
@@ -274,7 +318,7 @@ ivqr.vc <- function(object,covariance,bd_rule="Silver") {
 	return(vc)
 }
 
-ivqr.ks <- function(object, variable = NULL, trim = c(0.05,0.95), B = 1000,  b_scale = 1,
+ivqr.ks <- function(object, variable = NULL, trim = c(0.05,0.95), B = 2000,  b_scale = 1,
 	nullH="No_Effect"){
 
 	dim_d <- object$dim_d_d_k[1]
@@ -288,6 +332,8 @@ ivqr.ks <- function(object, variable = NULL, trim = c(0.05,0.95), B = 1000,  b_s
 
 	ks <- switch(nullH,
 		No_Effect = ivqr.ks.no(object, trim, B, variable, b_scale),
+		Dominance = ivqr.ks.dom(object, trim, B, variable, b_scale),
+		Location_Shift = ivqr.ks.const(object, trim, B, variable, b_scale),
 		"This test is not implemented")
 
 	return(ks)
@@ -306,16 +352,17 @@ ivqr.ks.no <- function(object, trim, B, variable, b_scale) {
 	J <- object$vc$J
 
 	# nrow = n, ncol = length(taus)
-	L <- matrix(rep(taus,n), n, length(taus), byrow=TRUE) - as.numeric(residuals < 0)
-
+	L <- matrix(rep(taus,n), n, length(taus), byrow = TRUE) - as.numeric(residuals < 0)
 
 	Z <- matrix(NA,n,length(taus))
 
 	for (tau_index in 1:length(taus)) {
 		invJ <- solve(J[,,tau_index])
 		R_invJ <- invJ[variable,] # = R %*% invJ, R = c(0,0,,,0,1,0,..0)
-		Z[,tau_index] <- diag(L[,tau_index]) %*% PSI %*% R_invJ
+		Z[,tau_index] <- as.vector(L[,tau_index]) * (PSI %*% R_invJ)
 	}
+
+	sd_z <- colMeans(Z ^ 2) ^ (1 / 2)
 
 	block_size <- as.integer(5 * n ^ (2/5)) * b_scale
 	V <- matrix(NA, B, length(taus))
@@ -326,13 +373,13 @@ ivqr.ks.no <- function(object, trim, B, variable, b_scale) {
 
 	# Trim the extreme tails
 	tl <- which(taus >= trim[1])[1]
-	th <- which(taus <= trim[2])[length(which(taus < trim[2]))]
-
-	s <- (block_size) ^ (1 / 2) * apply(abs(V[,(tl:th)]),1,max)
+	th <- which(taus <= trim[2])[length(which(taus <= trim[2]))]
+	s <- block_size ^ (1 / 2) * apply(t(t(abs(V[,(tl:th)])) / sd_z[tl:th]), 1, max)
 	s <- as.vector(s)
 	critical_value <- c(quantile(s,0.90),quantile(s,0.95),quantile(s,0.99))
 
 	process <- rbind(coef$endg_var,coef$exog_var)[variable,(tl:th)]
+	process <- process / sd_z
 	ks_stat <- max(abs(process)) * n ^ (1/2)
 
 	ks <- list()
@@ -345,6 +392,135 @@ ivqr.ks.no <- function(object, trim, B, variable, b_scale) {
 
 	return(ks)
 }
+
+ivqr.ks.dom <- function(object, trim, B, variable, b_scale) {
+	taus <- object$taus
+	data <- object$data
+	coef <- object$coef
+	fitted <- object$fitted
+	residuals <- object$residuals
+	endg_var_se <- object$se[variable]
+	dim_dk <- object$dim_d_d_k[1] + object$dim_d_d_k[3]
+	n <- object$n
+	PSI <- object$PSI
+	J <- object$vc$J
+
+	# nrow = n, ncol = length(taus)
+	L <- matrix(rep(taus,n), n, length(taus), byrow=TRUE) - as.numeric(residuals < 0)
+
+	Z <- matrix(NA,n,length(taus))
+
+	for (tau_index in 1:length(taus)) {
+		invJ <- solve(J[,,tau_index])
+		R_invJ <- invJ[variable,] # = R %*% invJ, R = c(0,0,,,0,1,0,..0)
+		Z[,tau_index] <- as.vector(L[,tau_index]) * (PSI %*% R_invJ)
+	}
+
+	sd_z <- colMeans(Z ^ 2) ^ (1 / 2)
+
+	block_size <- as.integer(5 * n ^ (2/5)) * b_scale
+	V <- matrix(NA, B, length(taus))
+	for (b in 1:B) {
+		resample_indexes <- sample(n, block_size, replace=FALSE)
+		V[b,] <- sum(Z[resample_indexes,]) / block_size
+	}
+
+	# Trim the extreme tails
+	tl <- which(taus >= trim[1])[1]
+	th <- which(taus <= trim[2])[length(which(taus < trim[2]))]
+
+	s <- block_size ^ (1 / 2) * apply(t(t(abs(V[,(tl:th)])) / sd_z[tl:th]), 1, max)
+	s <- as.vector(s)
+	critical_value <- c(quantile(s,0.90),quantile(s,0.95),quantile(s,0.99))
+
+	process <- rbind(coef$endg_var,coef$exog_var)[variable,(tl:th)]
+	ks_stat <- max(max(-1 * process / sd_z[tl:th]), 0) * n ^ (1/2)
+
+	ks <- list()
+	class(ks) <- "ivqr_ks"
+	ks$ks_stat <- ks_stat
+	ks$critical_value <- critical_value
+	ks$block_size <- block_size
+	ks$B <- B
+	ks$s <- s
+
+	return(ks)
+}
+
+
+ivqr.ks.const <- function(object, trim, B, variable, b_scale) {
+	taus <- object$taus
+	data <- object$copy_data
+	coef <- object$coef
+	grid <- object$grid
+	fitted <- object$fitted
+	gridMethod <- object$gridMethod
+	ivqrMethod <- object$ivqrMethod
+	qrMethod <- object$qrMethod
+	residuals <- object$residuals
+	formula <- formula(object$formula)
+	# endg_var_se <- object$se[variable]
+	dim_dk <- object$dim_d_d_k[1] + object$dim_d_d_k[3]
+	n <- object$n
+	PSI <- object$PSI
+	J <- object$vc$J
+
+	ivqr_median_fit <- ivqr(formula, taus = 0.5, data = data , grid = grid,
+		gridMethod = gridMethod, ivqrMethod = ivqrMethod, qrMethod = qrMethod)
+
+	coef_m <- ivqr_median_fit$coef
+	coef_m <- rbind(coef_m$endg_var, coef_m$exog_var)[variable,1]
+	residuals_m <- ivqr_median_fit$residuals[,1]
+	J_m <- ivqr_median_fit$vc$J[,,1]
+	L_m <- matrix(rep(0.5,n), n, length(0.5), byrow=TRUE) - as.numeric(residuals_m < 0)
+
+	# nrow = n, ncol = length(taus)
+	L <- matrix(rep(taus,n), n, length(taus), byrow=TRUE) - as.numeric(residuals < 0)
+
+	Z <- matrix(NA,n,length(taus))
+
+	for (tau_index in 1:length(taus)) {
+		invJ <- solve(J[,,tau_index])
+		R_invJ <- invJ[variable,] # = R %*% invJ, R = c(0,0,,,0,1,0,..0)
+		Z[,tau_index] <- (as.vector(L[,tau_index]) - as.vector(L_m[,1])) %*% (PSI  %*% R_invJ)
+	}
+
+	sd_z <- colMeans(Z ^ 2) ^ (1 / 2)
+	print(sd_z)
+	stop()
+	block_size <- as.integer(5 * n ^ (2/5)) * b_scale
+	V <- matrix(NA, B, length(taus))
+	for (b in 1:B) {
+		resample_indexes <- sample(n, block_size, replace=FALSE)
+		V[b,] <- sum(Z[resample_indexes,]) / block_size
+	}
+
+	# Trim the extreme tails cut out [1/2 - eps, 1/2 + eps]
+	tl <- which(taus >= trim[1])[1]
+	th <- which(taus <= trim[2])[length(which(taus < trim[2]))]
+	left_to_median <- which(taus < 0.5)[length(which(taus < 0.5 ))]
+	right_to_median <- which(taus > 0.5)[1]
+
+	s <- (block_size) ^ (1 / 2) * apply(abs(
+		V[,c(tl:left_to_median,right_to_median:th)]),1,max)
+	s <- as.vector(s)
+	critical_value <- c(quantile(s,0.90),quantile(s,0.95),quantile(s,0.99))
+
+	process <- rbind(coef$endg_var,coef$exog_var)[variable,c(tl:left_to_median,
+		right_to_median:th)]
+	ks_stat <- max(abs(process - coef_m )) * n ^ (1/2)
+
+	ks <- list()
+	class(ks) <- "ivqr_ks"
+	ks$ks_stat <- ks_stat
+	ks$critical_value <- critical_value
+	ks$block_size <- block_size
+	ks$B <- B
+	ks$s <- s
+
+	return(ks)
+}
+
 
 print.ivqr <- function(x, ...) {
 	d <- x$dim_d_d_k[1]
@@ -398,14 +574,25 @@ print.ivqr_ks <- function(x, ...) {
 	print(x$block_size)
 }
 
-plot.ivqr <- function(object){
+plot.ivqr <- function(object, trim = c(0.05,0.95), variable = 1){
 	warning("plot.ivqr is only implemented for dim(D) == 1")
-	up_bdd <- object$coef$endg_var + 1.96 * object$se[1,]
-	lw_bdd <- object$coef$endg_var - 1.96 * object$se[1,]
-	plot(taus,object$coef$endg_var,ylim=c(0,30000),type='n')
-	polygon(c(taus,rev(taus)),c(up_bdd,rev(lw_bdd)),col='grey')
-	lines(taus,object$coef$endg_var,ylim=c(0,30000))
+	taus <- object$taus
+	tl <- which(taus >= trim[1])[1]
+	th <- which(taus <= trim[2])[length(which(taus < trim[2]))]
+	taus <- taus[tl:th]
+
+	coef <- object$coef$endg_var[1,tl:th]
+	se <- object$se[1,tl:th]
+	up_bdd <- coef + 1.96 * se
+	lw_bdd <- coef - 1.96 * se
+
+	plot(taus,coef, ylim = c(min(lw_bdd) - max(se),
+		max(up_bdd) + max(se)), type='n')
+	polygon(c(taus, rev(taus)), c(up_bdd, rev(lw_bdd)), col = 'grey')
+	lines(taus,coef, ylim = c(min(lw_bdd) - max(se),
+		max(up_bdd) + max(se)))
 }
+
 
 plot.ivqr_weakIV <- function(object){
 	warning("weakIVtest: CI can be not-convex")
