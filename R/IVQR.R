@@ -283,7 +283,6 @@ ivqr.vc <- function(object,covariance,bd_rule="Silver") {
 	se <- matrix(NA,kd,length(taus))
 	cov_mats <- array(NA,dim = c(kd,kd,length(taus)))
 	J_array <- array(NA,dim = c(kd,kd,length(taus)))
-	print("Done with Preparing")
 	for(tau_index in 1:length(taus)){
 		e <- residuals[,tau_index]
 		# Silverman's rule of thumb
@@ -293,20 +292,13 @@ ivqr.vc <- function(object,covariance,bd_rule="Silver") {
 		}
 
 		S <- (taus[tau_index] - taus[tau_index] ^ 2) * (1 / n) * tPSI_PSI
-		print("Done with S")
 		kernel <- c(as.numeric( abs(e) < h ))
-		print("Done with kernel")
 
 		J <- (1 / (2 * n * h)) * t(kernel * PSI) %*% DX
 		J_array[,,tau_index] <- J
-		print("Done with J")
 		#invJ <- chol2inv(chol(J))
 		invJ <- solve(J)
-		print("Done with invJ")
-
-
 		cov_mats[,,tau_index] <- (1/n) * invJ %*% S %*% invJ
-		print("Done with multiplication")
 		se[,tau_index] <- diag(cov_mats[,,tau_index]) ^ (1/2)
 	}
 
@@ -481,14 +473,16 @@ ivqr.ks.const <- function(object, trim, B, variable, b_scale) {
 
 	for (tau_index in 1:length(taus)) {
 		invJ <- solve(J[,,tau_index])
+		invJ_m <- solve(J_m)
+		R_invJ_m <- invJ_m[variable,]
 		R_invJ <- invJ[variable,] # = R %*% invJ, R = c(0,0,,,0,1,0,..0)
-		Z[,tau_index] <- (as.vector(L[,tau_index]) - as.vector(L_m[,1])) %*% (PSI  %*% R_invJ)
+		Z[,tau_index] <- (as.vector(L[,tau_index]) * (PSI  %*% R_invJ)
+			- as.vector(L_m[,1]) * (PSI  %*% R_invJ_m))
 	}
 
 	sd_z <- colMeans(Z ^ 2) ^ (1 / 2)
-	print(sd_z)
-	stop()
 	block_size <- as.integer(5 * n ^ (2/5)) * b_scale
+
 	V <- matrix(NA, B, length(taus))
 	for (b in 1:B) {
 		resample_indexes <- sample(n, block_size, replace=FALSE)
@@ -500,16 +494,21 @@ ivqr.ks.const <- function(object, trim, B, variable, b_scale) {
 	th <- which(taus <= trim[2])[length(which(taus < trim[2]))]
 	left_to_median <- which(taus < 0.5)[length(which(taus < 0.5 ))]
 	right_to_median <- which(taus > 0.5)[1]
+	indexes <- c(tl:left_to_median,right_to_median:th)
 
-	s <- (block_size) ^ (1 / 2) * apply(abs(
-		V[,c(tl:left_to_median,right_to_median:th)]),1,max)
+	s <- (block_size) ^ (1 / 2) * apply(t(t(abs(V[,indexes])) / sd_z[indexes]),1,max)
 	s <- as.vector(s)
+
 	critical_value <- c(quantile(s,0.90),quantile(s,0.95),quantile(s,0.99))
 
-	process <- rbind(coef$endg_var,coef$exog_var)[variable,c(tl:left_to_median,
-		right_to_median:th)]
-	ks_stat <- max(abs(process - coef_m )) * n ^ (1/2)
+	process <- rbind(coef$endg_var,coef$exog_var)[variable,indexes]
 
+	ks_stat <- n ^ (1/2) * max(abs(process - coef_m) / sd_z[indexes])
+	# print(process)
+	# print(coef_m)
+	# print(sd_z[indexes])
+	# print(ks_stat)
+	# stop()
 	ks <- list()
 	class(ks) <- "ivqr_ks"
 	ks$ks_stat <- ks_stat
@@ -571,7 +570,7 @@ weakIVtest <- function(object, size = 0.05){
 print.ivqr_ks <- function(x, ...) {
 	print(x$ks_stat)
 	print(x$critical_value)
-	print(x$block_size)
+	print(paste("Block size:",x$block_size))
 }
 
 plot.ivqr <- function(object, trim = c(0.05,0.95), variable = 1){
