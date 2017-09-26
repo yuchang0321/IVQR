@@ -104,20 +104,6 @@ ivqr <- function(formula, taus=0.5, data, grid, gridMethod="Default", ivqrMethod
 		ivqr_est <- ivqr.fit(iqr_formula, tau = taus[i], data, grid, gridMethod,
 			ivqrMethod, qrMethod)
 
-		if (is.na(ivqr_est)){
-
-			if (i == 1 & length(taus) > 1){
-				new_taus <- taus[2:length(taus)]
-			} else if ( i < length(taus)){
-				new_taus <- c(taus[1:(i-1)],taus[(i+1):length(taus)])
-			} else if (i == length(taus)){
-				new_taus <- taus[1:(length(taus) - 1)]
-			}
-			return(ivqr(formula = formula(formula), taus= new_taus,
-				data = copy_data, grid = grid, gridMethod = gridMethod,
-				ivqrMethod = ivqrMethod, qrMethod = qrMethod))
-		}
-
 		coef$endg_var[,i] <- ivqr_est$coef_endg_var
 		coef$inst_var[,i] <- ivqr_est$coef_inst_var
 		coef$exog_var[,i] <- ivqr_est$coef_exog_var
@@ -175,7 +161,6 @@ ivqr.fit.iqr <- function(iqr_formula, tau, data, grid, gridMethod, qrMethod){
 	# Grid Search
 	objFcn <- GetObjFcn(iqr_formula,tau,data,qrMethod)
 	grid_search <- GridSearch(objFcn,tau,grid)
-	if (is.na(grid_search)) return(NA)
 	coef_endg_var <- grid_search$coef_endg_var
 	grid_value <- grid_search$grid_value
 
@@ -197,7 +182,17 @@ ivqr.fit.iqr <- function(iqr_formula, tau, data, grid, gridMethod, qrMethod){
 	dim_inst_var <- ncol(model.matrix(dim_inst_var,data))
 
 	data[[response_varname]] <- Y - D %*% coef_endg_var
-	rq_fit <- rq(inv_formula,tau,data)
+	
+	fit_rq <- withCallingHandlers( 
+		  	tryCatch(rq(inv_formula,tau,data),		
+		  	error = function(e){
+		  		cat("ERROR :",conditionMessage(e), "\n")
+		  		cat(paste("This occurs at tau=", tau))
+		  		return(Inf)}),
+		  	warning = Suppress_Sol_not_Unique
+	  )
+
+
 	coef_exog_var <- c(rq_fit$coef[1],rq_fit$coef[(2 + dim_inst_var) : length(rq_fit$coef)])
 	coef_inst_var <- rq_fit$coef[2 : (2 + dim_inst_var - 1)]
 	fitted <- D %*% coef_endg_var + X %*% coef_exog_var
@@ -226,13 +221,17 @@ GetObjFcn <- function(iqr_formula, taus, data, qrMethod) {
 	# Is not passing data, Y, D, response_varname Ok?
 	objFcn <- function(tau, alpha){
 		data[[response_varname]] <- Y - D %*% alpha
-		  rq_fit <- tryCatch({
-			rq(inv_formula,tau,data,method=qrMethod)
-		  },
-		  error=function(e){
-		  	cat("ERROR :",conditionMessage(e), "\n")
-		  	return(NA)})
-		if (is.na(rq_fit)) return(NA)
+		  rq_fit <- withCallingHandlers( 
+			  	tryCatch(rq(inv_formula,tau,data,method=qrMethod),
+			  	error = function(e){
+			  		cat("ERROR :",conditionMessage(e), "\n")
+			  		cat(paste("This occurs at tau=", tau,
+			  			"when evaluating grid value alpha=",alpha),"\n")
+			  		return(Inf)}),
+			  	warning = Suppress_Sol_not_Unique
+		  )
+
+		if (!grepl("rq", class(rq_fit))) return(Inf)
 		gamma <- rq_fit$coef[2 : (2 + dim_inst_var - 1)]
 		cov_mat <- summary.rq(rq_fit, se = "ker", covariance = TRUE)$cov
 		cov_mat <- cov_mat[(2 : (2 + dim_inst_var - 1)),(2 : (2 + dim_inst_var - 1))]
@@ -248,11 +247,6 @@ GridSearch <- function(objFcn,tau,grid){
 		grid_value <- rep(NA,length(grid))
 		for (i in 1:length(grid)) {
 			grid_value[i] <- objFcn(tau,grid[i])
-			if (is.na(grid_value[i])) {
-				print(paste("Error happened at tau=", tau))
-				return(NA)
-			}
-
 		}
 		output <- list()
 		output$coef_endg_var <- grid[which.min(abs(grid_value))]
@@ -552,13 +546,21 @@ ivqr.ks.exog <- function(object, trim, B, variable, b_scale, bd_rule = "Silver")
 	J <- object$vc$J
 
 	formula_rq <- formula(Formula(formula), lhs = 1, rhs = c(1,3), collapse = TRUE)
-	fit_rq <- rq(formula_rq, tau = taus, data = data , method = qrMethod)
+	fit_rq <- withCallingHandlers( 
+			  	tryCatch(rq(formula_rq, tau = taus, data = data, method = qrMethod),
+			  	error = function(e){
+			  		cat("ERROR :",conditionMessage(e), "\n")
+			  		cat(paste("This occurs at tau=", tau, "\n"))
+			  		return(Inf)}),
+			  	warning = Suppress_Sol_not_Unique
+		  )
+
 	coef_rq <- fit_rq$coef
 	rq_residuals <- fit_rq$residuals
 	X <- cbind(fit_rq$x[,1],fit_rq$x[,(2 + dim_d):dim(fit_rq$x)[2]])
 	D <- fit_rq$x[,2:(1 + dim_d)]
 	X_tilde <- cbind(D,X)
-	
+
 	# nrow = n, ncol = length(taus)
 	A <- matrix(rep(taus,n), n, length(taus), byrow=TRUE) - as.numeric(rq_residuals < 0)
 	L <- matrix(rep(taus,n), n, length(taus), byrow=TRUE) - as.numeric(residuals < 0)
@@ -694,4 +696,8 @@ plot.ivqr_weakIV <- function(object){
 	CI <- object$CI
 	taus <- object$taus
 	plot(rep(taus,nrow(CI)),c(t(CI)))
+}
+
+Suppress_Sol_not_Unique <-function(w) {
+	if( any( grepl( "Solution may be nonunique", w) ) ) invokeRestart( "muffleWarning" )
 }
