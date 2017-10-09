@@ -297,3 +297,9 @@ ivqr.ks.exog <- function(object, trim, B, variable, b_scale, bd_rule = "Silver")
 
 	return(ks)
 }
+
+print.ivqr_ks <- function(x, ...) {
+	print(x$ks_stat)
+	print(x$critical_value)
+	print(paste("Block size:",x$block_size))
+}

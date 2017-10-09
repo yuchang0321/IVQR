@@ -108,12 +108,23 @@ ivqr <- function(formula, taus=0.5, data, grid, gridMethod="Default", ivqrMethod
 			coef$endg_var[,i] <- ivqr_est$coef_endg_var
 			coef$inst_var[,i] <- ivqr_est$coef_inst_var
 			coef$exog_var[,i] <- ivqr_est$coef_exog_var
+
+			# Name labeling
+			rownames(coef$endg_var) <- names(ivqr_est$coef_endg_var)
+			rownames(coef$inst_var) <- names(ivqr_est$coef_inst_var)
+			rownames(coef$exog_var) <- names(ivqr_est$coef_exog_var)
+
 			residuals[,i] <- ivqr_est$residuals
 			fitted[,i] <- ivqr_est$fitted
 			grid_value[,i] <- ivqr_est$grid_value
 			error_tau_flag[i] <- FALSE
 		}
 	}
+
+	# Column names
+	taulabs <- paste("tau=",format(round(taus,3)))
+	colnames(coef$endg_var) <- colnames(coef$inst_var) <- colnames(coef$exog_var) <- taulabs
+
 	# Preparing for standard erros
 	fit <- list()
 	class(fit) <- "ivqr"
@@ -176,6 +187,7 @@ ivqr.fit.iqr <- function(iqr_formula, tau, data, grid, gridMethod, qrMethod){
 	D <- formula(iqr_formula, lhs = 1, rhs = 1)
 	D <- update(D,.~.-1)
 	D <- model.matrix(D,data)
+	names(coef_endg_var) <- colnames(D)
 
 	X <- formula(iqr_formula, lhs = 1, rhs = 3)
 	X <- model.matrix(X, data)
@@ -335,307 +347,15 @@ ivqr.vc <- function(object,covariance,bd_rule="Silver") {
 	return(vc)
 }
 
-ivqr.ks <- function(object, variable = NULL, trim = c(0.05,0.95), B = 2000,  b_scale = 1,
-	nullH="No_Effect", ...){
-	if (any(object$error_tau_flag)) Stop("Error occurred for some tau. Re-specify taus
-		and run ivqr() again")
-	dim_d <- object$dim_d_d_k[1]
 
-	if (dim_d > 1 & is.null(variable)) {
-		warning("Please specify which (endogenous) variable to test. Default
-			is the first endogenous variable.")
-	}
-
-	if (dim_d == 1 & is.null(variable)) variable = 1
-
-	ks <- switch(nullH,
-		No_Effect = ivqr.ks.no(object, trim, B, variable, b_scale),
-		Dominance = ivqr.ks.dom(object, trim, B, variable, b_scale),
-		Location_Shift = ivqr.ks.const(object, trim, B, variable, b_scale),
-		Exogeneity = ivqr.ks.exog(object, trim, B, variable, b_scale),
-		"This test is not implemented")
-	return(ks)
+print.ivqr <- function(x, ...){
+	cat("\nCoefficients of endogenous variables:\n\n")
+	print(x$coef$endg_var)
+	cat("\nCoefficients of exogenous variables:\n\n")
+	print(x$coef$exog_var)
 }
 
-ivqr.ks.no <- function(object, trim, B, variable, b_scale) {
-	taus <- object$taus
-	data <- object$data
-	coef <- object$coef
-	fitted <- object$fitted
-	residuals <- object$residuals
-	endg_var_se <- object$se[variable]
-	dim_dk <- object$dim_d_d_k[1] + object$dim_d_d_k[3]
-	n <- object$n
-	PSI <- object$PSI
-	J <- object$vc$J
-
-	# nrow = n, ncol = length(taus)
-	L <- matrix(rep(taus,n), n, length(taus), byrow = TRUE) - as.numeric(residuals < 0)
-
-	Z <- matrix(NA,n,length(taus))
-
-	for (tau_index in 1:length(taus)) {
-		invJ <- solve(J[,,tau_index])
-		R_invJ <- invJ[variable,] # = R %*% invJ, R = c(0,0,,,0,1,0,..0)
-		Z[,tau_index] <- as.vector(L[,tau_index]) * (PSI %*% R_invJ)
-	}
-
-	sd_z <- colMeans(Z ^ 2) ^ (1 / 2)
-
-	block_size <- as.integer(5 * n ^ (2/5)) * b_scale
-	V <- matrix(NA, B, length(taus))
-	for (b in 1:B) {
-		resample_indexes <- sample(n, block_size, replace=FALSE)
-		V[b,] <- sum(Z[resample_indexes,]) / block_size
-	}
-
-	# Trim the extreme tails
-	tl <- which(taus >= trim[1])[1]
-	th <- which(taus <= trim[2])[length(which(taus <= trim[2]))]
-	s <- block_size ^ (1 / 2) * apply(t(t(abs(V[,(tl:th)])) / sd_z[tl:th]), 1, max)
-	s <- as.vector(s)
-	critical_value <- c(quantile(s,0.90),quantile(s,0.95),quantile(s,0.99))
-
-	process <- rbind(coef$endg_var,coef$exog_var)[variable,(tl:th)]
-	process <- process / sd_z[tl:th]
-	ks_stat <- max(abs(process)) * n ^ (1/2)
-
-	ks <- list()
-	class(ks) <- "ivqr_ks"
-	ks$ks_stat <- ks_stat
-	ks$critical_value <- critical_value
-	ks$block_size <- block_size
-	ks$B <- B
-	ks$s <- s
-
-	return(ks)
-}
-
-ivqr.ks.dom <- function(object, trim, B, variable, b_scale) {
-	taus <- object$taus
-	data <- object$data
-	coef <- object$coef
-	fitted <- object$fitted
-	residuals <- object$residuals
-	endg_var_se <- object$se[variable]
-	dim_dk <- object$dim_d_d_k[1] + object$dim_d_d_k[3]
-	n <- object$n
-	PSI <- object$PSI
-	J <- object$vc$J
-
-	# nrow = n, ncol = length(taus)
-	L <- matrix(rep(taus,n), n, length(taus), byrow=TRUE) - as.numeric(residuals < 0)
-
-	Z <- matrix(NA,n,length(taus))
-
-	for (tau_index in 1:length(taus)) {
-		invJ <- solve(J[,,tau_index])
-		R_invJ <- invJ[variable,] # = R %*% invJ, R = c(0,0,,,0,1,0,..0)
-		Z[,tau_index] <- as.vector(L[,tau_index]) * (PSI %*% R_invJ)
-	}
-
-	sd_z <- colMeans(Z ^ 2) ^ (1 / 2)
-
-	block_size <- as.integer(5 * n ^ (2/5)) * b_scale
-	V <- matrix(NA, B, length(taus))
-	for (b in 1:B) {
-		resample_indexes <- sample(n, block_size, replace=FALSE)
-		V[b,] <- sum(Z[resample_indexes,]) / block_size
-	}
-
-	# Trim the extreme tails
-	tl <- which(taus >= trim[1])[1]
-	th <- which(taus <= trim[2])[length(which(taus < trim[2]))]
-
-	s <- block_size ^ (1 / 2) * apply(t(t(abs(V[,(tl:th)])) / sd_z[tl:th]), 1, max)
-	s <- as.vector(s)
-	critical_value <- c(quantile(s,0.90),quantile(s,0.95),quantile(s,0.99))
-
-	process <- rbind(coef$endg_var,coef$exog_var)[variable,(tl:th)]
-	ks_stat <- max(max(-1 * process / sd_z[tl:th]), 0) * n ^ (1/2)
-
-	ks <- list()
-	class(ks) <- "ivqr_ks"
-	ks$ks_stat <- ks_stat
-	ks$critical_value <- critical_value
-	ks$block_size <- block_size
-	ks$B <- B
-	ks$s <- s
-
-	return(ks)
-}
-
-
-ivqr.ks.const <- function(object, trim, B, variable, b_scale) {
-	taus <- object$taus
-	data <- object$copy_data
-	coef <- object$coef
-	grid <- object$grid
-	fitted <- object$fitted
-	gridMethod <- object$gridMethod
-	ivqrMethod <- object$ivqrMethod
-	qrMethod <- object$qrMethod
-	residuals <- object$residuals
-	formula <- formula(object$formula)
-	# endg_var_se <- object$se[variable]
-	dim_dk <- object$dim_d_d_k[1] + object$dim_d_d_k[3]
-	n <- object$n
-	PSI <- object$PSI
-	J <- object$vc$J
-
-	ivqr_median_fit <- ivqr(formula, taus = 0.5, data = data , grid = grid,
-		gridMethod = gridMethod, ivqrMethod = ivqrMethod, qrMethod = qrMethod)
-
-	coef_m <- ivqr_median_fit$coef
-	coef_m <- rbind(coef_m$endg_var, coef_m$exog_var)[variable,1]
-	residuals_m <- ivqr_median_fit$residuals[,1]
-	J_m <- ivqr_median_fit$vc$J[,,1]
-	L_m <- matrix(rep(0.5,n), n, length(0.5), byrow=TRUE) - as.numeric(residuals_m < 0)
-
-	# nrow = n, ncol = length(taus)
-	L <- matrix(rep(taus,n), n, length(taus), byrow=TRUE) - as.numeric(residuals < 0)
-
-	Z <- matrix(NA,n,length(taus))
-
-	for (tau_index in 1:length(taus)) {
-		invJ <- solve(J[,,tau_index])
-		invJ_m <- solve(J_m)
-		R_invJ_m <- invJ_m[variable,]
-		R_invJ <- invJ[variable,] # = R %*% invJ, R = c(0,0,,,0,1,0,..0)
-		Z[,tau_index] <- (as.vector(L[,tau_index]) * (PSI  %*% R_invJ)
-			- as.vector(L_m[,1]) * (PSI  %*% R_invJ_m))
-	}
-
-	sd_z <- colMeans(Z ^ 2) ^ (1 / 2)
-	block_size <- as.integer(5 * n ^ (2/5)) * b_scale
-
-	V <- matrix(NA, B, length(taus))
-	for (b in 1:B) {
-		resample_indexes <- sample(n, block_size, replace=FALSE)
-		V[b,] <- sum(Z[resample_indexes,]) / block_size
-	}
-
-	# Trim the extreme tails cut out [1/2 - eps, 1/2 + eps]
-	tl <- which(taus >= trim[1])[1]
-	th <- which(taus <= trim[2])[length(which(taus < trim[2]))]
-	left_to_median <- which(taus < 0.5)[length(which(taus < 0.5 ))]
-	right_to_median <- which(taus > 0.5)[1]
-	indexes <- c(tl:left_to_median,right_to_median:th)
-
-	s <- (block_size) ^ (1 / 2) * apply(t(t(abs(V[,indexes])) / sd_z[indexes]),1,max)
-	s <- as.vector(s)
-
-	critical_value <- c(quantile(s,0.90),quantile(s,0.95),quantile(s,0.99))
-
-	process <- rbind(coef$endg_var,coef$exog_var)[variable,indexes]
-
-	ks_stat <- n ^ (1/2) * max(abs(process - coef_m) / sd_z[indexes])
-	# print(process)
-	# print(coef_m)
-	# print(sd_z[indexes])
-	# print(ks_stat)
-	# stop()
-	ks <- list()
-	class(ks) <- "ivqr_ks"
-	ks$ks_stat <- ks_stat
-	ks$critical_value <- critical_value
-	ks$block_size <- block_size
-	ks$B <- B
-	ks$s <- s
-
-	return(ks)
-}
-
-ivqr.ks.exog <- function(object, trim, B, variable, b_scale, bd_rule = "Silver") {
-	taus <- object$taus
-	data <- object$copy_data
-	coef <- object$coef
-	grid <- object$grid
-	fitted <- object$fitted
-	gridMethod <- object$gridMethod
-	ivqrMethod <- object$ivqrMethod
-	qrMethod <- object$qrMethod
-	residuals <- object$residuals
-	formula <- formula(object$formula)
-	dim_dk <- object$dim_d_d_k[1] + object$dim_d_d_k[3]
-	dim_d <- object$dim_d_d_k[1]
-	n <- object$n
-	PSI <- object$PSI
-	J <- object$vc$J
-
-
-	formula_rq <- formula(Formula(formula), lhs = 1, rhs = c(1,3), collapse = TRUE)
-	fit_rq <- withCallingHandlers(
-			  	rq(formula_rq, tau = taus, data = data, method = qrMethod),
-			  	warning = Suppress_Sol_not_Unique
-		  )
-
-	coef_rq <- fit_rq$coef
-	rq_residuals <- fit_rq$residuals
-	model_matrix <- model.matrix(formula_rq,data)
-	X <- cbind(model_matrix[,1],model_matrix[,(2 + dim_d):(dim(model_matrix)[2])])
-	D <- model_matrix[,2:(1 + dim_d)]
-	X_tilde <- cbind(D,X)
-
-	# nrow = n, ncol = length(taus)
-	A <- matrix(rep(taus,n), n, length(taus), byrow=TRUE) - as.numeric(rq_residuals < 0)
-	L <- matrix(rep(taus,n), n, length(taus), byrow=TRUE) - as.numeric(residuals < 0)
-	Z <- matrix(NA,n,length(taus))
-	for (tau_index in 1:length(taus)) {
-
-		e <- rq_residuals[,tau_index]
-		if ( bd_rule == "Silver" ) {
-			h <- 1.364 * ( (2*sqrt(pi)) ^ (-1/5) ) * std(e) * ( n ^ (-1/5) )
-		}
-		kernel <- c(as.numeric( abs(e) < h ))
-
-		H <- (1 / (2 * n * h)) * t(kernel * X_tilde) %*% X_tilde
-		invH <- solve(H)
-		invJ <- solve(J[,,tau_index])
-		R_invH <- invH[variable,]
-		R_invJ <- invJ[variable,] # = R %*% invJ, R = c(0,0,,,0,1,0,..0)
-		Z[,tau_index] <- (as.vector(L[,tau_index]) * (PSI  %*% R_invJ)
-			- as.vector(A[,tau_index]) * (X_tilde  %*% R_invH))
-	}
-
-	sd_z <- colMeans(Z ^ 2) ^ (1 / 2)
-	block_size <- as.integer(5 * n ^ (2/5)) * b_scale
-
-	V <- matrix(NA, B, length(taus))
-	for (b in 1:B) {
-		resample_indexes <- sample(n, block_size, replace=FALSE)
-		V[b,] <- sum(Z[resample_indexes,]) / block_size
-	}
-
-	# Trim the extreme tails cut out [1/2 - eps, 1/2 + eps]
-	tl <- which(taus >= trim[1])[1]
-	th <- which(taus <= trim[2])[length(which(taus < trim[2]))]
-
-	s <- block_size ^ (1 / 2) * apply(t(t(abs(V[,(tl:th)])) / sd_z[tl:th]), 1, max)
-	s <- as.vector(s)
-
-	critical_value <- c(quantile(s,0.90),quantile(s,0.95),quantile(s,0.99))
-	process <- rbind(
-		coef$endg_var - coef_rq[2:(1 + dim_d),],
-		coef$exog_var[1,] - coef_rq[1,],
-		coef$exog_var[2:dim(coef$exog_var)[1],] - coef_rq[(2 + dim_d):(dim(coef_rq))[1],]
-		)[variable,(tl:th)]
-
-	ks_stat <- n ^ (1/2) * max(abs(process) / sd_z[(tl:th)])
-
-	ks <- list()
-	class(ks) <- "ivqr_ks"
-	ks$ks_stat <- ks_stat
-	ks$critical_value <- critical_value
-	ks$block_size <- block_size
-	ks$B <- B
-	ks$s <- s
-
-	return(ks)
-}
-
-
-print.ivqr <- function(x, ...) {
+summary.ivqr <- function(x, ...) {
 	d <- x$dim_d_d_k[1]
 	k <- x$dim_d_d_k[3]
 	taus <- x$taus
@@ -647,7 +367,6 @@ print.ivqr <- function(x, ...) {
 	# }
 
 	for (tau_index in 1:length(taus)){
-
 		cat("\ntau:")
 		print(taus[tau_index])
 		cat("\nCoefficients of endogenous variables\n")
@@ -658,18 +377,15 @@ print.ivqr <- function(x, ...) {
 		table <- cbind(t(coef$exog_var)[tau_index,],se[(d + 1):(d + k),tau_index])
 		colnames(table) <- c("coef","se")
 		print(table)
-
 	}
 }
 
 weakIVtest <- function(object, size = 0.05){
-
 	grid <- object$grid
 	dim_d <- object$dim_d_d_k[1]
 	obj_fcn <- object$obj_fcn
 	taus <- object$taus
 
-	#!
 	if (dim_d > 1) stop("weakIVtest() is only implented for single endogenous variable")
 	critical_value <- qchisq((1 - size), dim_d)
 	grid_mat <- replicate(length(taus),grid)
@@ -677,59 +393,53 @@ weakIVtest <- function(object, size = 0.05){
 	result <- list()
 	result$CI <- grid_mat
 	result$taus <- taus
+	result$yname <- rownames(object$coef$endg_var)[1]
 	class(result) <- "ivqr_weakIV"
-	return(result)
+	plot.ivqr_weakIV(result)
 }
-
-print.ivqr_ks <- function(x, ...) {
-	print(x$ks_stat)
-	print(x$critical_value)
-	print(paste("Block size:",x$block_size))
-}
-
-plot.ivqr <- function(object, trim = c(0.05,0.95), variable = 1){
-	warning("plot.ivqr is only implemented for dim(D) == 1")
-	taus <- object$taus
-	tl <- which(taus >= trim[1])[1]
-	th <- which(taus <= trim[2])[length(which(taus < trim[2]))]
-	taus <- taus[tl:th]
-
-	coef <- object$coef$endg_var[1,tl:th]
-	se <- object$se[1,tl:th]
-	up_bdd <- coef + 1.96 * se
-	lw_bdd <- coef - 1.96 * se
-
-	plot(taus,coef, ylim = c(min(lw_bdd) - max(se),
-		max(up_bdd) + max(se)), type='n')
-	polygon(c(taus, rev(taus)), c(up_bdd, rev(lw_bdd)), col = 'grey')
-	lines(taus,coef, ylim = c(min(lw_bdd) - max(se),
-		max(up_bdd) + max(se)))
-}
-
 
 plot.ivqr_weakIV <- function(object){
 	warning("weakIVtest: CI can be not-convex")
 	CI <- object$CI
 	taus <- object$taus
-	plot(rep(taus,nrow(CI)),c(t(CI)))
+	yname <- object$yname
+	plot(rep(taus,nrow(CI)), c(t(CI)), xlab = "tau", ylab = yname)
+}
+
+plot.ivqr <- function(object, trim = c(0.05,0.95), variable = 1){
+	taus <- object$taus
+	tl <- which(taus >= trim[1])[1]
+	th <- which(taus <= trim[2])[length(which(taus < trim[2]))]
+	taus <- taus[tl:th]
+
+	coef <- object$coef$endg_var[variable,tl:th]
+	yname <- rownames(object$coef$endg_var)[variable]
+
+	se <- object$se[1,tl:th]
+	up_bdd <- coef + 1.96 * se
+	lw_bdd <- coef - 1.96 * se
+
+	plot(taus,coef, ylim = c(min(lw_bdd) - max(se),
+		max(up_bdd) + max(se)), type='n', xlab = "tau", ylab = yname)
+	polygon(c(taus, rev(taus)), c(up_bdd, rev(lw_bdd)), col = 'grey')
+	lines(taus,coef, ylim = c(min(lw_bdd) - max(se),
+		max(up_bdd) + max(se)))
 }
 
 Suppress_Sol_not_Unique <-function(w) {
 	if( any( grepl( "Solution may be nonunique", w) ) ) invokeRestart( "muffleWarning" )
 }
 
-Diagnostic <- function(object, tau_index, size = 0.95, trim = NULL){
-
-
+Diagnostic <- function(object, tau_index, size = 0.05, trim = NULL){
 	dim_d <- object$dim_d_d_k[1]
 	grid <- object$grid
 	dim_d <- object$dim_d_d_k[1]
 	obj_fcn <- object$obj_fcn[,tau_index[1]]
 
 	if (!is.null(trim)){
-		if (min(trim) > max(grid) | max(trim) > min(grid)){
-			stop("Parameter trim results in nothing to plot. Either 
-				min(trim) > max(grid) or max(trim) > min(grid)")
+		if (min(trim) > max(grid) | max(trim) < min(grid)){
+			stop("Parameter trim results in nothing to plot. Either
+				min(trim) > max(grid) or max(trim) < min(grid)")
 		}
 		gl <- which(grid >= trim[1])[1]
 		gh <- which(grid <= trim[2])[length(which(grid <= trim[2]))]
@@ -744,7 +454,9 @@ Diagnostic <- function(object, tau_index, size = 0.95, trim = NULL){
 		warning("Multiple taus not allowed in Diagnostic: plot restricted to first element")
 	}
 
-	plot(grid[gl:gh], obj_fcn[gl:gh])
-	abline(h = critical_value)
-
+	plot(grid[gl:gh], obj_fcn[gl:gh], type = 'l', col = "blue",
+		ylab = "Objective Function", xlab = "Grid")
+	abline(h = critical_value, col = "green")
+	legend("topright", legend = "”Weak-IV Critical Value", col = "green", lty=1:2, cex=0.8)
+	#legend(0.8 * length(grid[gl:gh]), 0.8 * length(obj_fcn[gl:gh]), c(”Weak-IV critical value”), lty=c(1,1), lwd=c(2.5,2.5), col = c("green"))
 }
