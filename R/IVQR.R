@@ -99,18 +99,20 @@ ivqr <- function(formula, taus=0.5, data, grid, gridMethod="Default", ivqrMethod
 	fitted <- matrix(NA,nrow(X),length(taus))
 	residuals <- matrix(NA,nrow(X),length(taus))
 	grid_value <- matrix(NA,length(grid),length(taus))
+	error_tau_flag <- !logical(length(taus))
 	for (i in 1:length(taus)) {
 		print(paste("Now at tau=",taus[i]))
 		ivqr_est <- ivqr.fit(iqr_formula, tau = taus[i], data, grid, gridMethod,
 			ivqrMethod, qrMethod)
-
-		coef$endg_var[,i] <- ivqr_est$coef_endg_var
-		coef$inst_var[,i] <- ivqr_est$coef_inst_var
-		coef$exog_var[,i] <- ivqr_est$coef_exog_var
-		residuals[,i] <- ivqr_est$residuals
-		fitted[,i] <- ivqr_est$fitted
-		grid_value[,i] <- ivqr_est$grid_value
-
+		if (is.list(ivqr_est)){
+			coef$endg_var[,i] <- ivqr_est$coef_endg_var
+			coef$inst_var[,i] <- ivqr_est$coef_inst_var
+			coef$exog_var[,i] <- ivqr_est$coef_exog_var
+			residuals[,i] <- ivqr_est$residuals
+			fitted[,i] <- ivqr_est$fitted
+			grid_value[,i] <- ivqr_est$grid_value
+			error_tau_flag[i] <- FALSE
+		}
 	}
 	# Preparing for standard erros
 	fit <- list()
@@ -120,6 +122,7 @@ ivqr <- function(formula, taus=0.5, data, grid, gridMethod="Default", ivqrMethod
 	fit$residuals <- residuals
 	fit$formula <- formula
 	fit$taus <- taus
+	fit$error_tau_flag <- error_tau_flag
 	fit$data <- data
 	fit$dim_d_d_k <- c(ncol(D),ncol(D),ncol(X))
 	fit$n <- nrow(X)
@@ -182,19 +185,25 @@ ivqr.fit.iqr <- function(iqr_formula, tau, data, grid, gridMethod, qrMethod){
 	dim_inst_var <- ncol(model.matrix(dim_inst_var,data))
 
 	data[[response_varname]] <- Y - D %*% coef_endg_var
-	
-	fit_rq <- withCallingHandlers( 
-		  	tryCatch(rq(inv_formula,tau,data),		
+
+	fit_rq <-
+	withCallingHandlers(
+	  	tryCatch(rq(inv_formula,tau,data),
 		  	error = function(e){
 		  		cat("ERROR :",conditionMessage(e), "\n")
+		  		#! Why X singular or not can depend on y & tau?
+		  		cat(paste("Singular Design Matrix for whole grid", tau))
 		  		cat(paste("This occurs at tau=", tau))
-		  		return(Inf)}),
-		  	warning = Suppress_Sol_not_Unique
-	  )
+		  		return(Inf)
+		  		}
+		  	),
+	  	warning = Suppress_Sol_not_Unique
+  	)
 
+	if (!grepl("rq",class(fit_rq))) return(Inf)
 
-	coef_exog_var <- c(rq_fit$coef[1],rq_fit$coef[(2 + dim_inst_var) : length(rq_fit$coef)])
-	coef_inst_var <- rq_fit$coef[2 : (2 + dim_inst_var - 1)]
+	coef_exog_var <- c(fit_rq$coef[1],fit_rq$coef[(2 + dim_inst_var) : length(fit_rq$coef)])
+	coef_inst_var <- fit_rq$coef[2 : (2 + dim_inst_var - 1)]
 	fitted <- D %*% coef_endg_var + X %*% coef_exog_var
 	residuals <- Y - fitted
 
@@ -221,7 +230,7 @@ GetObjFcn <- function(iqr_formula, taus, data, qrMethod) {
 	# Is not passing data, Y, D, response_varname Ok?
 	objFcn <- function(tau, alpha){
 		data[[response_varname]] <- Y - D %*% alpha
-		  rq_fit <- withCallingHandlers( 
+		  rq_fit <- withCallingHandlers(
 			  	tryCatch(rq(inv_formula,tau,data,method=qrMethod),
 			  	error = function(e){
 			  		cat("ERROR :",conditionMessage(e), "\n")
@@ -267,6 +276,7 @@ GridSearch <- function(objFcn,tau,grid){
 
 ivqr.vc <- function(object,covariance,bd_rule="Silver") {
 	taus <- object$taus
+	error_tau_flag <- object$error_tau_flag
 	DX <- object$DX
 	PSI <- object$PSI
 	residuals <- object$residuals
@@ -280,7 +290,15 @@ ivqr.vc <- function(object,covariance,bd_rule="Silver") {
 
 	Check_Invertible <- function(m) class(try(solve(m),silent=T))=="matrix"
 
-	for(tau_index in 1:length(taus)){
+	for (tau_index in 1:length(taus)){
+		while (error_tau_flag[tau_index] & tau_index < length(taus)){
+			tau_index <- tau_index + 1
+		}
+
+		if (error_tau_flag[tau_index] & tau_index == length(tau_index)){
+			break
+		}
+
 		e <- residuals[,tau_index]
 		# Silverman's rule of thumb
 
@@ -319,7 +337,8 @@ ivqr.vc <- function(object,covariance,bd_rule="Silver") {
 
 ivqr.ks <- function(object, variable = NULL, trim = c(0.05,0.95), B = 2000,  b_scale = 1,
 	nullH="No_Effect", ...){
-
+	if (any(object$error_tau_flag)) Stop("Error occurred for some tau. Re-specify taus
+		and run ivqr() again")
 	dim_d <- object$dim_d_d_k[1]
 
 	if (dim_d > 1 & is.null(variable)) {
@@ -335,7 +354,6 @@ ivqr.ks <- function(object, variable = NULL, trim = c(0.05,0.95), B = 2000,  b_s
 		Location_Shift = ivqr.ks.const(object, trim, B, variable, b_scale),
 		Exogeneity = ivqr.ks.exog(object, trim, B, variable, b_scale),
 		"This test is not implemented")
-
 	return(ks)
 }
 
@@ -545,20 +563,18 @@ ivqr.ks.exog <- function(object, trim, B, variable, b_scale, bd_rule = "Silver")
 	PSI <- object$PSI
 	J <- object$vc$J
 
+
 	formula_rq <- formula(Formula(formula), lhs = 1, rhs = c(1,3), collapse = TRUE)
-	fit_rq <- withCallingHandlers( 
-			  	tryCatch(rq(formula_rq, tau = taus, data = data, method = qrMethod),
-			  	error = function(e){
-			  		cat("ERROR :",conditionMessage(e), "\n")
-			  		cat(paste("This occurs at tau=", tau, "\n"))
-			  		return(Inf)}),
+	fit_rq <- withCallingHandlers(
+			  	rq(formula_rq, tau = taus, data = data, method = qrMethod),
 			  	warning = Suppress_Sol_not_Unique
 		  )
 
 	coef_rq <- fit_rq$coef
 	rq_residuals <- fit_rq$residuals
-	X <- cbind(fit_rq$x[,1],fit_rq$x[,(2 + dim_d):dim(fit_rq$x)[2]])
-	D <- fit_rq$x[,2:(1 + dim_d)]
+	model_matrix <- model.matrix(formula_rq,data)
+	X <- cbind(model_matrix[,1],model_matrix[,(2 + dim_d):(dim(model_matrix)[2])])
+	D <- model_matrix[,2:(1 + dim_d)]
 	X_tilde <- cbind(D,X)
 
 	# nrow = n, ncol = length(taus)
@@ -700,4 +716,35 @@ plot.ivqr_weakIV <- function(object){
 
 Suppress_Sol_not_Unique <-function(w) {
 	if( any( grepl( "Solution may be nonunique", w) ) ) invokeRestart( "muffleWarning" )
+}
+
+Diagnostic <- function(object, tau_index, size = 0.95, trim = NULL){
+
+
+	dim_d <- object$dim_d_d_k[1]
+	grid <- object$grid
+	dim_d <- object$dim_d_d_k[1]
+	obj_fcn <- object$obj_fcn[,tau_index[1]]
+
+	if (!is.null(trim)){
+		if (min(trim) > max(grid) | max(trim) > min(grid)){
+			stop("Parameter trim results in nothing to plot. Either 
+				min(trim) > max(grid) or max(trim) > min(grid)")
+		}
+		gl <- which(grid >= trim[1])[1]
+		gh <- which(grid <= trim[2])[length(which(grid <= trim[2]))]
+	} else {
+		gl <- 1
+		gh <- length(grid)
+	}
+	if (dim_d > 1) stop("weakIVtest() is only implented for single endogenous variable")
+		critical_value <- qchisq((1 - size), dim_d)
+
+	if(length(tau_index[1]) > 1) {
+		warning("Multiple taus not allowed in Diagnostic: plot restricted to first element")
+	}
+
+	plot(grid[gl:gh], obj_fcn[gl:gh])
+	abline(h = critical_value)
+
 }
