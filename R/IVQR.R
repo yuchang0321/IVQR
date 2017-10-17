@@ -16,6 +16,9 @@ ivqr <- function(formula, taus=0.5, data, grid, gridMethod="Default", ivqrMethod
 	if (any(taus == 0)) taus[taus == 0] <- eps
 	if (any(taus == 1)) taus[taus == 1] <- 1 - eps
 
+	if (!any(grepl(qrMethod,c("br","fn","fnb")))){
+		stop("Please specify one of the quantreg solution method: br, fn, or fnb")
+	}
 	# By default, we use D projection on (X,Z) as instrument
 	# Add the instruments to the data and update the formula respectively
 	XZ <- formula(formula, lhs = 1, rhs = c(2,3), collapse = TRUE)
@@ -101,7 +104,7 @@ ivqr <- function(formula, taus=0.5, data, grid, gridMethod="Default", ivqrMethod
 	grid_value <- matrix(NA,length(grid),length(taus))
 	error_tau_flag <- !logical(length(taus))
 	for (i in 1:length(taus)) {
-		print(paste("Now at tau=",taus[i]))
+		# print(paste("Now at tau=",taus[i]))
 		ivqr_est <- ivqr.fit(iqr_formula, tau = taus[i], data, grid, gridMethod,
 			ivqrMethod, qrMethod)
 		if (is.list(ivqr_est)){
@@ -149,7 +152,7 @@ ivqr <- function(formula, taus=0.5, data, grid, gridMethod="Default", ivqrMethod
 	fit$DX <- DX
 	fit$PSI <- PSI
 
-	print("Estimating se")
+	# print("Estimating se")
 	vc <- ivqr.vc(fit,covariance,"Silver")
 
 	#plot.ivqr(fit)
@@ -355,7 +358,7 @@ print.ivqr <- function(x, ...){
 	print(x$coef$exog_var)
 }
 
-summary.ivqr <- function(x, ...) {
+summary.ivqr <- function(x, i = NULL, ...) {
 	d <- x$dim_d_d_k[1]
 	k <- x$dim_d_d_k[3]
 	taus <- x$taus
@@ -366,7 +369,14 @@ summary.ivqr <- function(x, ...) {
 	# 	warning("Dimension of se does not match that of ceof estimates")
 	# }
 
-	for (tau_index in 1:length(taus)){
+	if(!is.null(i)){
+		start <- end <- i 
+	} else{
+		start <- 1
+		end <- length(taus)
+	}
+
+	for (tau_index in start:end){
 		cat("\ntau:")
 		print(taus[tau_index])
 		cat("\nCoefficients of endogenous variables\n")
@@ -430,12 +440,15 @@ Suppress_Sol_not_Unique <-function(w) {
 	if( any( grepl( "Solution may be nonunique", w) ) ) invokeRestart( "muffleWarning" )
 }
 
-Diagnostic <- function(object, tau_index, size = 0.05, trim = NULL){
+Diagnostic <- function(object, i, size = 0.05, trim = NULL){
 	dim_d <- object$dim_d_d_k[1]
 	grid <- object$grid
 	dim_d <- object$dim_d_d_k[1]
-	obj_fcn <- object$obj_fcn[,tau_index[1]]
-
+	obj_fcn <- object$obj_fcn[,i]
+	taus <- object$taus
+	PSI <- object$PSI
+	n <- object$n
+	residuals <- object$residuals
 	if (!is.null(trim)){
 		if (min(trim) > max(grid) | max(trim) < min(grid)){
 			stop("Parameter trim results in nothing to plot. Either
@@ -450,13 +463,21 @@ Diagnostic <- function(object, tau_index, size = 0.05, trim = NULL){
 	if (dim_d > 1) stop("weakIVtest() is only implented for single endogenous variable")
 		critical_value <- qchisq((1 - size), dim_d)
 
-	if(length(tau_index[1]) > 1) {
+	if(length(i) > 1) {
 		warning("Multiple taus not allowed in Diagnostic: plot restricted to first element")
 	}
 
+
+	# Plot the result from grid search
 	plot(grid[gl:gh], obj_fcn[gl:gh], type = 'l', col = "blue",
 		ylab = "Objective Function", xlab = "Grid")
 	abline(h = critical_value, col = "green")
-	legend("topright", legend = "”Weak-IV Critical Value", col = "green", lty=1:2, cex=0.8)
-	#legend(0.8 * length(grid[gl:gh]), 0.8 * length(obj_fcn[gl:gh]), c(”Weak-IV critical value”), lty=c(1,1), lwd=c(2.5,2.5), col = c("green"))
-}
+	legend("topright", legend = "Weak-IV Critical Value", col = "green", lty=1:2, cex=0.8)
+	
+	# Calculate the GMM FOC
+	L <- rep(taus[i],n) - as.numeric(residuals[,i] < 0)
+	GMM_criterion <- rowSums(L * t(PSI))
+	print(paste("At tau=", taus[i], "GMM FOC has values:"))
+	print("(These values should be closed to zero asymptotically)")
+	print(cbind(GMM_criterion/(sqrt(n))))
+}	
