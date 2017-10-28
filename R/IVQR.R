@@ -2,7 +2,9 @@ ivqr <- function(formula, taus=0.5, data, grid, gridMethod="Default", ivqrMethod
 				qrMethod="br"){
 
 	formula <- Formula(formula)
-
+	if(length(formula)[2] < 3){
+		stop("If there's no control variable, specify the model like y ~ d | z | 1")
+	}
 	#!
 	# warning("cannot exclude intercept")
 
@@ -23,7 +25,7 @@ ivqr <- function(formula, taus=0.5, data, grid, gridMethod="Default", ivqrMethod
 	# Add the instruments to the data and update the formula respectively
 	XZ <- formula(formula, lhs = 1, rhs = c(2,3), collapse = TRUE)
 	XZ <- model.matrix(XZ,data)
-	D  <- update( formula(formula,lhs = 1, rhs = 1), . ~ . - 1)
+	D  <- update(formula(formula,lhs = 1, rhs = 1), . ~ . - 1)
 	D  <- model.matrix(D,data)
 
 	# If my code doesn't run for multiple endg var, uncomment below
@@ -217,7 +219,13 @@ ivqr.fit.iqr <- function(iqr_formula, tau, data, grid, gridMethod, qrMethod){
 
 	if (!grepl("rq",class(fit_rq))) return(Inf)
 
-	coef_exog_var <- c(fit_rq$coef[1],fit_rq$coef[(2 + dim_inst_var) : length(fit_rq$coef)])
+	#coef_exog_var <- c(fit_rq$coef[1])
+	if(length(fit_rq$coef) >= (2 + dim_inst_var)){
+		coef_exog_var <- c(fit_rq$coef[1],fit_rq$coef[(2 + dim_inst_var) : length(fit_rq$coef)])	
+	} else {
+		coef_exog_var <- c(fit_rq$coef[1])
+	}
+	
 	coef_inst_var <- fit_rq$coef[2 : (2 + dim_inst_var - 1)]
 	fitted <- D %*% coef_endg_var + X %*% coef_exog_var
 	residuals <- Y - fitted
@@ -289,7 +297,7 @@ GridSearch <- function(objFcn,tau,grid){
 	}
 }
 
-ivqr.vc <- function(object,covariance,bd_rule="Silver") {
+ivqr.vc <- function(object, covariance, bd_rule="Silver", h_multi = 1) {
 	taus <- object$taus
 	error_tau_flag <- object$error_tau_flag
 	DX <- object$DX
@@ -318,10 +326,11 @@ ivqr.vc <- function(object,covariance,bd_rule="Silver") {
 		# Silverman's rule of thumb
 
 		if (bd_rule == "Silver") {
-			h <- 1.364 * ( (2*sqrt(pi)) ^ (-1/5) ) * std(e) * ( n ^ (-1/5) )
+			h <- h_multi * 1.364 * ( (2*sqrt(pi)) ^ (-1/5) ) * std(e) * ( n ^ (-1/5) )
 		}
 
 		S <- (taus[tau_index] - taus[tau_index] ^ 2) * (1 / n) * tPSI_PSI
+
 
 		kernel <- c(as.numeric( abs(e) < h ))
 		J <- (1 / (2 * n * h)) * t(kernel * PSI) %*% DX
@@ -461,7 +470,7 @@ Diagnostic <- function(object, i, size = 0.05, trim = NULL){
 		gh <- length(grid)
 	}
 	if (dim_d > 1) stop("weakIVtest() is only implented for single endogenous variable")
-		critical_value <- qchisq((1 - size), dim_d)
+	critical_value <- qchisq((1 - size), dim_d)
 
 	if(length(i) > 1) {
 		warning("Multiple taus not allowed in Diagnostic: plot restricted to first element")
