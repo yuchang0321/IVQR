@@ -205,7 +205,7 @@ ivqr.fit.iqr <- function(iqr_formula, tau, data, grid, gridMethod, qrMethod){
 
 	fit_rq <-
 	withCallingHandlers(
-	  	tryCatch(rq(inv_formula,tau,data),
+	  	tryCatch(rq(inv_formula,tau,data,method=qrMethod),
 		  	error = function(e){
 		  		cat("ERROR :",conditionMessage(e), "\n")
 		  		#! Why X singular or not can depend on y & tau?
@@ -347,7 +347,7 @@ ivqr.vc <- function(object, covariance, bd_rule="Silver", h_multi = 1) {
 		J_array[,,tau_index] <- J
 		invJ <- solve(J)
 
-		cov_mats[,,tau_index] <- (1/n) * invJ %*% S %*% invJ
+		cov_mats[,,tau_index] <- (1/n) * invJ %*% S %*% t(invJ)
 		se[,tau_index] <- diag(cov_mats[,,tau_index]) ^ (1/2)
 	}
 
@@ -449,7 +449,7 @@ Suppress_Sol_not_Unique <-function(w) {
 	if( any( grepl( "Solution may be nonunique", w) ) ) invokeRestart( "muffleWarning" )
 }
 
-Diagnostic <- function(object, i, size = 0.05, trim = NULL){
+Diagnostic <- function(object, i, size = 0.05, trim = NULL, GMM_only = 0){
 	dim_d <- object$dim_d_d_k[1]
 	grid <- object$grid
 	dim_d <- object$dim_d_d_k[1]
@@ -478,10 +478,12 @@ Diagnostic <- function(object, i, size = 0.05, trim = NULL){
 
 
 	# Plot the result from grid search
-	plot(grid[gl:gh], obj_fcn[gl:gh], type = 'l', col = "blue",
-		ylab = "Objective Function", xlab = "Grid")
-	abline(h = critical_value, col = "green")
-	legend("topright", legend = "Weak-IV Critical Value", col = "green", lty=1:2, cex=0.8)
+	if (!GMM_only){
+		plot(grid[gl:gh], obj_fcn[gl:gh], type = 'l', col = "blue",
+			ylab = "Objective Function", xlab = "Grid")
+		abline(h = critical_value, col = "green")
+		legend("topright", legend = "Weak-IV Critical Value", col = "green", lty=1:2, cex=0.8)	
+	}
 	
 	# Calculate the GMM FOC
 	L <- rep(taus[i],n) - as.numeric(residuals[,i] < 0)
