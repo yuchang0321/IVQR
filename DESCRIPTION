@@ -2,7 +2,7 @@ Package: IVQR
 Type: Package
 Title: IVQR: Instrumental Variable Quantile Regression
 Version: 0.1
-Imports: quantreg, matlab, Matrix, Formula
+Depends: quantreg, Formula, matlab
 Date: 2017-09-06
 Author: Yu-Chang Chen and Kaspar Wuthrich
 Maintainer: Yu-Chang Chen <yuc391@ucsd.edu>

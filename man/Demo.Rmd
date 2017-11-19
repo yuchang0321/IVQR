@@ -1,0 +1,135 @@
+---
+title: "Instrumental Variable Quantile Regression"
+author: "Yu-Chang Chen"
+date: "`r Sys.Date()`"
+bibliography: ref.bib
+output: html_document
+vignette: >
+  %\VignetteIndexEntry{Instrument Variable Quantile Regression}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+Instrumental variable quantile regression [@chernozhukov2005iv] provides the ability to study heterogeneous impacts of variables and serves as a valuable tool in empirical analysis in economics, where endogeneity commonly arises. To facilitate its power and make ease for empirical practitioners, I develop an R package implementing the corresponding estimation procedure and Wald test [@chernozhukov2006instrumental], inference on quantile process with score subsampling [@chernozhukov2006instrumental], and weak IV robust inference [@chernozhukov2008instrumental]. Also, I replicate the empirical example in [@CH04] to demonstrate its usage.
+
+## Introduction
+
+In the seminal paper, Chernozhukov and Hansen (2005) proposes an instrumental variable extension of quantile regression. The model, in a potential outcome framework, can be expressed as:
+\[Y := Y_D,\]
+where $Y$ and D denotes the outcome variable and the treatment variable(s) respectively. The object of interest, the quantile treatment effect (QTE), is the $\tau$-th quantile of potential outcomes under various potential treatment states $d$, conditional on observed characteristics $X = x$, denoted as
+\[QTE = q(\tau,d_1,x) -  q(\tau,d_0,x),\]
+\[q(\tau,d_0,x) = Q_{Y_d}(\tau|x),\]
+
+Let $Z$ denote the instrumental variable(s). Under the main assumptions in their model, the quantile treatment effects are non-parametrically identified by the following moment conditions:
+\[ P[Y < q(\tau,D,X)|X,Z] = \tau, \forall \tau \in (0,1)  \]
+However, the moment conditions are non-convex and non-smooth, making the estimation computationally difficult in problems with a practically relevant size.
+
+Several approaches have been developed to overcome this. The most popular method is the inverse quantile method [@chernozhukov2006instrumental], which is what I implement in the package. It focuses on linear-in-parameter structure quantile models:
+\[q(\tau,d,x) = d\alpha_0(\tau) + x' \beta_0(\tau)\]
+The method circumvents the computational difficulty by observing the following restrictions on the conditional quantile function:
+\[ Q_{Y-D'\alpha_0}(\tau|X,Z) = X'\beta_0 + Z'\gamma_0, \ with \ \gamma_0 = 0 \]
+
+can be derived from the moment condition. As a result, the estimation problem amounts to finding the coefficients that satisfy the restriction, and this can be done by grid searching over the possible values of $\alpha$. Each evaluation at a point of the grid only involves a quantile regression, which can be done quite efficiently with the interior point-preprocessing methods [@PK97]. The method is most useful when the dimension of $\alpha$ is small, which is usually the case. However, this method is not practical for large dimensions of alpha as the computations needed will grow exponentially.
+
+## Coefficient Estimation and Standard Errors
+
+In this section, we discuss how to estimate the QTE function with the package. As it is most easily explained with an example, I will replicate the 401k empirical analysis done in Chernozhukov and Hansen 2004. 
+
+```{r, include = FALSE}
+load("~/Dropbox/IVQR/Empirical_Example/401K.RData")
+
+```
+
+First we load the package and data, then we ensure that 'icat' and 'ecat' are stored as categorical variables. 
+```{r hide = TRUE, message = FALSE, warning=FALSE}
+library(IVQR)
+library(Formula)
+library(quantreg)
+library(foreign) # read stata
+
+CH04 <- read.dta("~/Dropbox/IVQR/Data/CH04.dta")
+CH04$icat <- factor(CH04$icat)
+CH04$ecat <- factor(CH04$ecat)
+```
+
+Follow the model specification suggested in the paper:
+```{r, fig.show='hold'}
+model <- net_tfa ~ p401 | e401 | icat+ecat+a1+a2+a3+a4+marr+fsize+twoearn+db+pira+hown
+```
+net_tfa is the outcome variable, which is the net financial assets as a measure of wealth. Variable p401 indicates 401(k) participation status and is instrumented for by e401, 401(k) eligibility. The remaining variables are the controls, consisting of dummies for income category, dummies for age category, dummies for education category, a marital status indicator, family size, two-earner status, DB pension status, IRA participation status, homeownership status, and a constant.
+
+###  ingle Quantile
+
+Set up the parameters to feed in the function ivqr(). Explictly, specify the following:
+-quantile(s) intended for the estimation
+-grid for the grid search
+-qrMethod to determine which algorithm to employ in the quantile regression
+```{r}
+taus <- 0.5
+grid <- seq(0,25000,500)
+qrMethod <- 'br'
+```
+
+An easy way to find out the ranges of the grid is to construct one with a two stage quantile regression (2SQR). The function suggest_grid() provides a grid centered at the estimate from 2SQR, with the range determined by the standard error of the estimator. However, it is recommended to use the function Diagnostic() to see if the objective function is minimized. 
+
+```{r}
+fit_median <- ivqr(formula = model, taus=taus, data=CH04, grid=grid, qrMethod='br')
+fit_median
+```
+Printing the result from ivqr() will give the estimates and standard errors obtained from the kernel estimator. 
+
+### Quantile Process
+
+To estimate the whole quantile process and to further make inferences on it, first specify the parameter taus as a grid from 0 to 1. 
+
+```{r eval=FALSE}
+taus <- seq(0.1,0.9,0.01)
+fit$netfa <- ivqr(formula = iqr_model, taus=taus, data=CH04, grid=grid, qrMethod='br')
+```
+
+Instead of printing the fitted model, a more elegant and informative way is to plot the estimates over quantiles for each variable separately. Here, the effect of the 401k program is our main interest, so we plot the corresponding estimates and 95% CI:
+
+```{r warning=FALSE}
+plot(fit$netfa)
+```
+
+## General Inference
+
+With the estimated process, we can further make inferences on the process. For example, we may test the null hypothesis that the program has no effect, i.e. $\alpha(\tau)= \forall \tau \in (0,1)$. This can be done by calculating the Kolmogorov-Smirnov test statistics with critical values obtained from score subsampling:
+
+```{r}
+ivqr.ks(fit$netfa, trim = c(0.1,0.9), nullH = "No_Effect")
+```
+
+We can also test other hypothesis, specifically:
+- that the effect is constamt across quantiles. 
+- that the effect is unambiguously beneficial.
+- that the endogeneity we worried is actually not an issue.
+
+```{r}
+ivqr.ks(fit$netfa, trim = c(0.1,0.9), nullH = "Location_Shift")
+```
+```{r}
+ivqr.ks(fit$netfa, trim = c(0.1,0.9), nullH = "Dominance")
+```
+```{r}
+ivqr.ks(fit$netfa, trim = c(0.1,0.9), nullH = "Exogeneity")
+```
+
+## Weak-IV Robust Inference
+ 
+Chernozhukov and Hansen (2008) also provides a testing procedure that is robust to weak instruments. The function weakIVtest() calculates and plot the weak IV robust confidence interval:
+
+```{r}
+weakIVtest(fit$netfa)
+```
+
+One can also focus at a specific quantile to see if the objective function is properly minimized. This is done by first ploting the objective function evaluated on the grid specified along with the critical value. Secondly, the value of GMM criterion function evaluated by the IQR estimae is provided.
+```{r}
+tau_index <- 1 # taus[1] = 0.1
+Diagnostic(fit$netfa,tau_index,trim = c(0,10000))
+```
+## Conclusion
+In conclusion, the IVQR is a useful method to study heterogeneity arising in various settings. However, the use of IVQR is not widespread due to the nontrivial programming involved. This package attempts to make IVQR more approachable to applied practitioners. 
+
+## Reference
