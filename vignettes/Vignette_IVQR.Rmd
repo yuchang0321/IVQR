@@ -1,0 +1,124 @@
+---
+title: "Demo: An Analysis on Job Training Partnership Act"
+author: "Yu-Chang Chen"
+date: "November 18, 2017"
+bibliography: ref.bib
+output: html_document
+vignette: >
+  %\VignetteEngine{knitr::rmarkdown}
+---
+
+Instrumental variable quantile regression [@CH05] provides the ability to study heterogeneous impacts of variables and serves as a valuable tool in empirical analysis in economics, where endogeneity commonly arises. To facilitate its power and make ease for empirical practitioners, I develop an R package implementing the corresponding estimation procedure and Wald test [@CH06], inference on quantile process with score subsampling [@CH06], and weak IV robust inference [@CH08]. Also, I replicate one of the empirical example in [CH08] to demonstrate its usage.
+
+## Introduction
+
+In the seminal paper, Chernozhukov and Hansen (2005) proposes an instrumental variable extension of quantile regression. The model, in a potential outcome framework, can be expressed as:
+\[Y := Y_D,\]
+where $Y$ and D denotes the outcome variable and the treatment variable(s) respectively. The object of interest, the quantile treatment effect (QTE), is the $\tau$-th quantile of potential outcomes under various potential treatment states $d$, conditional on observed characteristics $X = x$, denoted as
+\[QTE = q(\tau,d_1,x) -  q(\tau,d_0,x),\]
+\[q(\tau,d_0,x) = Q_{Y_d}(\tau|x),\]
+
+Let $Z$ denote the instrumental variable(s). Under the main assumptions in their model, the quantile treatment effects are non-parametrically identified by the following moment conditions:
+\[ P[Y < q(\tau,D,X)|X,Z] = \tau, \forall \tau \in (0,1)  \]
+However, the moment conditions are non-convex and non-smooth, making the estimation computationally difficult in problems with a practically relevant size.
+
+Several approaches have been developed to overcome this. The most popular method is the inverse quantile method [@CH06], which is what I implement in the package. It focuses on linear-in-parameter structure quantile models:
+\[q(\tau,d,x) = d\alpha_0(\tau) + x' \beta_0(\tau)\]
+The method circumvents the computational difficulty by observing the following restrictions on the conditional quantile function:
+\[ Q_{Y-D'\alpha_0}(\tau|X,Z) = X'\beta_0 + Z'\gamma_0, \ with \ \gamma_0 = 0 \]
+
+can be derived from the moment condition. As a result, the estimation problem amounts to finding the coefficients that satisfy the restriction, and this can be done by grid searching over the possible values of $\alpha$. Each evaluation at a point of the grid only involves a quantile regression, which can be done quite efficiently with the interior point-preprocessing methods [@PK97]. The method is most useful when the dimension of $\alpha$ is small, which is usually the case. However, this method is not practical for large dimensions of alpha as the computations needed will grow exponentially.
+
+## Coefficient Estimation and Standard Errors
+
+In this section, we discuss how to estimate the QTE function with the package. As it is most easily explained with an example, I will replicate the 401k empirical analysis done in Chernozhukov and Hansen 2004. 
+
+First we load the package and data:
+```{r, include = FALSE}
+setwd("~/Dropbox/IVQR/IVQR/vignettes")
+```
+
+```{r hide = TRUE, message = FALSE, warning = FALSE}
+library(IVQR)
+data(JTPA)
+```
+
+
+Follow the model specification suggested in the paper:
+```{r, fig.show='hold'}
+model <- y ~ d | z | hsorged + black + hispanic + married + wkless13 + age2225 + age2629 + age3035 + age3644 + age4554 + class_tr + ojt_jsa + f2sms
+```
+In the model, D indicates training status and is instrumented for by assignment to the treatment group, the outcomes Y are earnings, and Z is the instrument which is a dummy variable indicating assignment to the treatment group. The vector of controls, X, includes dummies for black and Hispanic persons, a dummy indicating high-school graduates and GED holders, five age-group dummies, a marital status dummy, a dummy indicating whether the applicant worked 12 or more weeks in the 12 months prior to the assignment, a dummy signifying that earnings data are from a second follow-up survey, and dummies for the recommended service strategy.
+
+We then set up the parameters to feed in the function ivqr(). Explictly, specify the following:
+-quantile(s) intended for the estimation
+-grid for the grid search
+-qrMethod to determine which algorithm to employ in the quantile regression
+```{r}
+taus <- seq(0.05,0.95,0.05)
+grid <- seq(-2500,7500,100)
+qrMethod <- 'br'
+```
+
+An easy way to find out the ranges of the grid is to construct one with a two stage quantile regression (2SQR). The function suggest_grid() provides a grid centered at the estimate from 2SQR (Not yet implemented), with the range determined by the standard error of the estimator. However, it is recommended to use the function Diagnostic() to see if the objective function is minimized after estimation. 
+
+```{r}
+fit <- ivqr(formula = model, taus=taus, data=JTPA, grid=grid, qrMethod='br')
+```
+
+Printing the result from ivqr() directly will give the estimates. However, it's easier to read the results by using function summary(). This also enables the user to focus on one particular quantile. Here, we use median as an example:
+```{r}
+taus[10] # taus[10] is the median
+summary(fit, i = 10)
+```
+
+It's also possible to plot the estimated quantile process of the endgonous variable, alongside with the point-wise 95% confidence interval, using plot():
+```{r}
+plot(fit)
+```
+
+
+## Inference on the Quantile Process
+
+The package can also perform test on the estimated process. For example, we may test the null hypothesis that the program has no effect, i.e. $\alpha(\tau)= \forall \tau \in (0,1)$. This can be done by calculating the Kolmogorov-Smirnov test statistics with critical values obtained from score subsampling:
+
+```{r}
+ivqr.ks(fit, trim = c(0.1,0.9), nullH = "No_Effect")
+```
+
+We can also test the null hypothesis that the effect is constamt across quantiles. There, we spcify the parameter nullH as "Location_Shift"
+
+```{r}
+ivqr.ks(fit, trim = c(0.05,0.95), nullH = "Location_Shift")
+```
+
+Option Dominance tests if the program is umambiguously beneficial across quantiles:
+```{r}
+ivqr.ks(fit, trim = c(0.05,0.95), nullH = "Dominance")
+```
+
+Option Exogeneity tests if the endogenous variable is actually exogeneous:
+```{r}
+ivqr.ks(fit, trim = c(0.05,0.95), nullH = "Exogeneity")
+```
+
+## Weak IV Robust Inference
+ 
+Chernozhukov and Hansen (2008) also provides a testing procedure that is robust to weak instruments. The function weakIVtest() calculates the weak IV robust confidence interval, and we visualize with plot():
+
+```{r warning = FALSE}
+weakIVtest(fit)
+```
+
+## Check if the objective is properly minimize
+
+The Inverse Quantile Method implictly involvs a grid search. In case of weak-IV, the objective function may be flat. Therefore, it is helpful to plot the objective function with Diagnostic(). The function Diagostic() also calculates the derivatives of the GMM estimating equations. Again, we use median as the example:
+
+```{r}
+Diagnostic(fit, i = 10)
+```
+
+## Conclusion
+In conclusion, the IVQR is a useful method to study heterogeneity arising in various settings. However, the use of IVQR is not widespread due to the nontrivial programming involved. This package attempts to make IVQR more approachable to applied practitioners. 
+
+## Reference
