@@ -1,3 +1,39 @@
+#' Instrumental Variable Qauntile Regression
+#' @param fomula A Formula (not the built-in formula) object. A correct model 
+#' specificaion should look like y ~ d | z | x, where y is the outcome variable,
+#' d is the endogenous variable, z is the instrument, and x is the control 
+#' variable'. If no control is needed, write y ~ d | z | 1. Constant has to be
+#' included, and number of endogenous variable should be no more than two.
+#' @param taus The quantile(s) to be estimated, which should be a vector that 
+#' contains number strictly between 0 and 1.
+#' @param data A data.frame in which to interpret the variables named in the 
+#' formula.
+#' @param grid A vector that specifies the grid for estimating the 
+#' coefficient of the endogenous variable. The grid should be reasonably large 
+#' and fine so that the objective function is properly minimized. 
+#' Users are encouraged to try different grids and use the function 
+#' Diagnostic() to visually inspect the objective functions.
+#' @param gridMethod The type of grid search. In the current version,
+#' only the method "Default" is available, which is simply an exhaustive 
+#' searching.
+#' @param ivqrMethod The algorithm to compute the fit. In the current version,
+#' only the "iqr" (instrumental quantile regression) algorithm is available.
+#' @param qrMethod The algorithmic method used in the (conventional) quantile
+#' regression, which is part of the instrumental quantile regression algorithm.
+#' For more information, see the help file of function \code{rq()} from the 
+#' package quantreg.
+#' @return An ivqr object. Use functions such as summary() or plot() to see
+#' the coefficient estimates and standard errors. Weak-IV robust inference and 
+#' general inferences are implemented respectively by the fucntions 
+#' \code{weakIVtest()} and \code{ivqr.ks()}.
+#' @examples
+#' data(ivqr_eg)
+#' fit <- ivqr(y ~ d | z | x, 0.5, grid = seq(-2,2,0.2), data = ivqr_eg) # median
+#' fit <- ivqr(y ~ d | z | x, 0.25, grid = seq(-2,2,0.2), data = ivqr_eg) # the first quartile
+#' fit <- ivqr(y ~ d | z | x, seq(0.1,0.9,0.1), grid = seq(-2,2,0.2), data = ivqr_eg) # a process
+#' plot(fit) # plot the coefficients of the endogenous variable along with 95% CI
+#' summary(fit) # print the results
+
 ivqr <- function(formula, taus=0.5, data, grid, gridMethod="Default", ivqrMethod="iqr",
 				qrMethod="br"){
 
@@ -399,6 +435,19 @@ summary.ivqr <- function(x, i = NULL, ...) {
 	}
 }
 
+#' Weak-IV Robust Test
+#' @param object An ivqr object returned from the function \code{ivqr()}
+#' @param size the size of the test. Default is 0.05.
+#' package quantreg.
+#' @return An ivqr_weakIV object along with a plot that shows the confidence 
+#' region. It is also possible to print the confidence set by applying the method 
+#' \code{print()} to the ivqr_weakIV object. 
+#' Note that the confidence region is not guaranteed to be convex.
+#' @examples 
+#' data(ivqr_eg)
+#' fit <- ivqr(y ~ d | z | x, seq(0.1,0.9,0.1), grid = seq(-2,2,0.2), data = ivqr_eg) # a process
+#' weakIVtest(fit)
+#' print(fit)
 weakIVtest <- function(object, size = 0.05){
 	grid <- object$grid
 	dim_d <- object$dim_d_d_k[1]
@@ -449,6 +498,20 @@ Suppress_Sol_not_Unique <-function(w) {
 	if( any( grepl( "Solution may be nonunique", w) ) ) invokeRestart( "muffleWarning" )
 }
 
+#' Plotting the Objective Function
+#' @param object An ivqr object returned from the function \code{ivqr()}
+#' @param i index of specific quantile to inspect. For example, if
+#' argument \code{taus = c(0.25,0.5,0.75)} was used as an input of \code{ivqr()}
+#' , specify \code{i=2} for the median.
+#' @param size the size of the test. Default is 0.05.
+#' @param trim a vector of two number indicating the lower and upper bounds 
+#' of the quantiles to inspect.
+#' @return A plot of the objective function as well as the (asymptotical) first
+#' order conditions evaluated at the coefficient estimates.
+#' @examples 
+#' data(ivqr_eg)
+#' fit <- ivqr(y ~ d | z | x, c(0.25,0.5,0.75), grid = seq(-2,2,0.2), data = ivqr_eg)
+#' Diagnostic(fit,2) # Plot the objective function at the median.
 Diagnostic <- function(object, i, size = 0.05, trim = NULL, GMM_only = 0){
 	dim_d <- object$dim_d_d_k[1]
 	grid <- object$grid

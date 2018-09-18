@@ -1,4 +1,23 @@
-
+#' General Inference
+#' Testing general hypothesis regarding the qunatile process of the endogenous
+#' variable.
+#' @param object An ivqr object returned from the function \code{ivqr()}
+#' @param variable A number indicates which endogenous variable to test. Since 
+#' at most two endongenous variables can be included in the function \code{ivqr},
+#' this argument should be either 1 or 2.
+#' @param trim A vector of two numbers indicating the lower and upper bounds 
+#' of the quantiles to consider.
+#' @param B Number of sub-sampling in the bootstrap. Default is 2000.
+#' @param nullH The hypothesis to be tested. The four options are: No_Effect, 
+#' Dominance, Location_Shift, and Exogeneity.
+#' @return 
+#' @examples 
+#' data(ivqr_eg)
+#' fit <- ivqr(y ~ d | z | x, seq(0.15,0.85,0.02), grid = seq(-2,2,0.2), data = ivqr_eg) # taus should be a fine grid 
+#' ivqr(fit,nullH=No_Effect) # Test of no effect.
+#' ivqr(fit,nullH=Dominance) # Test of dominance.
+#' ivqr(fit,nullH=Location_Shift) # Test of location shift.
+#' ivqr(fit,nullH=Exogeneity) # Test of exogeneity.
 ivqr.ks <- function(object, variable = NULL, trim = c(0.05,0.95), B = 2000,  b_scale = 1,
 	nullH="No_Effect", ...){
 	if (any(object$error_tau_flag)) Stop("Error occurred for some tau. Re-specify taus
@@ -35,7 +54,7 @@ ivqr.ks.no <- function(object, trim, B, variable, b_scale) {
 
 	# nrow = n, ncol = length(taus)
 	L <- matrix(rep(taus,n), n, length(taus), byrow = TRUE) - as.numeric(residuals < 0)
-
+	
 	Z <- matrix(NA,n,length(taus))
 
 	for (tau_index in 1:length(taus)) {
