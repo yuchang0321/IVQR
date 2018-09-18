@@ -10,7 +10,8 @@
 #' @param B Number of sub-sampling in the bootstrap. Default is 2000.
 #' @param nullH The hypothesis to be tested. The four options are: No_Effect, 
 #' Dominance, Location_Shift, and Exogeneity.
-#' @return 
+#' @return An ivqr_ks object which contains information regarding test statistics,
+#' critical value, sub-sampling block size, ...etc.
 #' @examples 
 #' data(ivqr_eg)
 #' fit <- ivqr(y ~ d | z | x, seq(0.15,0.85,0.02), grid = seq(-2,2,0.2), data = ivqr_eg) # taus should be a fine grid 
@@ -18,6 +19,7 @@
 #' ivqr(fit,nullH=Dominance) # Test of dominance.
 #' ivqr(fit,nullH=Location_Shift) # Test of location shift.
 #' ivqr(fit,nullH=Exogeneity) # Test of exogeneity.
+#' @export
 ivqr.ks <- function(object, variable = NULL, trim = c(0.05,0.95), B = 2000,  b_scale = 1,
 	nullH="No_Effect", ...){
 	if (any(object$error_tau_flag)) Stop("Error occurred for some tau. Re-specify taus
@@ -316,7 +318,7 @@ ivqr.ks.exog <- function(object, trim, B, variable, b_scale, bd_rule = "Silver")
 
 	return(ks)
 }
-
+#' @export
 print.ivqr_ks <- function(x, ...) {
 	print(x$ks_stat)
 	print(x$critical_value)

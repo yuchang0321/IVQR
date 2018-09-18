@@ -33,7 +33,8 @@
 #' fit <- ivqr(y ~ d | z | x, seq(0.1,0.9,0.1), grid = seq(-2,2,0.2), data = ivqr_eg) # a process
 #' plot(fit) # plot the coefficients of the endogenous variable along with 95% CI
 #' summary(fit) # print the results
-
+#' @import Formula
+#' @export
 ivqr <- function(formula, taus=0.5, data, grid, gridMethod="Default", ivqrMethod="iqr",
 				qrMethod="br"){
 
@@ -241,7 +242,7 @@ ivqr.fit.iqr <- function(iqr_formula, tau, data, grid, gridMethod, qrMethod){
 
 	fit_rq <-
 	withCallingHandlers(
-	  	tryCatch(rq(inv_formula,tau,data,method=qrMethod),
+	  	tryCatch(quantreg::rq(inv_formula,tau,data,method=qrMethod),
 		  	error = function(e){
 		  		cat("ERROR :",conditionMessage(e), "\n")
 		  		#! Why X singular or not can depend on y & tau?
@@ -290,7 +291,7 @@ GetObjFcn <- function(iqr_formula, taus, data, qrMethod) {
 	objFcn <- function(tau, alpha){
 		data[[response_varname]] <- Y - D %*% alpha
 		  rq_fit <- withCallingHandlers(
-			  	tryCatch(rq(inv_formula,tau,data,method=qrMethod),
+			  	tryCatch(quantreg::rq(inv_formula,tau,data,method=qrMethod),
 			  	error = function(e){
 			  		cat("ERROR :",conditionMessage(e), "\n")
 			  		cat(paste("This occurs at tau=", tau,
@@ -301,7 +302,7 @@ GetObjFcn <- function(iqr_formula, taus, data, qrMethod) {
 
 		if (!grepl("rq", class(rq_fit))) return(Inf)
 		gamma <- rq_fit$coef[2 : (2 + dim_inst_var - 1)]
-		cov_mat <- summary.rq(rq_fit, se = "ker", covariance = TRUE)$cov
+		cov_mat <- quantreg::summary.rq(rq_fit, se = "ker", covariance = TRUE)$cov
 		cov_mat <- cov_mat[(2 : (2 + dim_inst_var - 1)),(2 : (2 + dim_inst_var - 1))]
 		wald_stat <- t(gamma) %*% solve(cov_mat) %*% gamma
 		return(wald_stat)
@@ -362,7 +363,7 @@ ivqr.vc <- function(object, covariance, bd_rule="Silver", h_multi = 1) {
 		# Silverman's rule of thumb
 
 		if (bd_rule == "Silver") {
-			h <- h_multi * 1.364 * ( (2*sqrt(pi)) ^ (-1/5) ) * std(e) * ( n ^ (-1/5) )
+			h <- h_multi * 1.364 * ( (2*sqrt(pi)) ^ (-1/5) ) * sd(e) * ( n ^ (-1/5) )
 		}
 
 		S <- (taus[tau_index] - taus[tau_index] ^ 2) * (1 / n) * tPSI_PSI
@@ -395,14 +396,14 @@ ivqr.vc <- function(object, covariance, bd_rule="Silver", h_multi = 1) {
 	return(vc)
 }
 
-
+#' @export
 print.ivqr <- function(x, ...){
 	cat("\nCoefficients of endogenous variables:\n\n")
 	print(x$coef$endg_var)
 	cat("\nCoefficients of exogenous variables:\n\n")
 	print(x$coef$exog_var)
 }
-
+#' @export
 summary.ivqr <- function(x, i = NULL, ...) {
 	d <- x$dim_d_d_k[1]
 	k <- x$dim_d_d_k[3]
@@ -448,6 +449,7 @@ summary.ivqr <- function(x, i = NULL, ...) {
 #' fit <- ivqr(y ~ d | z | x, seq(0.1,0.9,0.1), grid = seq(-2,2,0.2), data = ivqr_eg) # a process
 #' weakIVtest(fit)
 #' print(fit)
+#' @export
 weakIVtest <- function(object, size = 0.05){
 	grid <- object$grid
 	dim_d <- object$dim_d_d_k[1]
@@ -465,7 +467,7 @@ weakIVtest <- function(object, size = 0.05){
 	class(result) <- "ivqr_weakIV"
 	plot.ivqr_weakIV(result)
 }
-
+#' @export
 plot.ivqr_weakIV <- function(object){
 	warning("weakIVtest: CI can be not-convex")
 	CI <- object$CI
@@ -473,7 +475,7 @@ plot.ivqr_weakIV <- function(object){
 	yname <- object$yname
 	plot(rep(taus,nrow(CI)), c(t(CI)), xlab = "tau", ylab = yname)
 }
-
+#' @export
 plot.ivqr <- function(object, trim = c(0.05,0.95), variable = 1){
 	taus <- object$taus
 	tl <- which(taus >= trim[1])[1]
@@ -512,6 +514,7 @@ Suppress_Sol_not_Unique <-function(w) {
 #' data(ivqr_eg)
 #' fit <- ivqr(y ~ d | z | x, c(0.25,0.5,0.75), grid = seq(-2,2,0.2), data = ivqr_eg)
 #' Diagnostic(fit,2) # Plot the objective function at the median.
+#' @export
 Diagnostic <- function(object, i, size = 0.05, trim = NULL, GMM_only = 0){
 	dim_d <- object$dim_d_d_k[1]
 	grid <- object$grid

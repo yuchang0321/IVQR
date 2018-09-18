@@ -24,6 +24,10 @@ of the quantiles to consider.}
 \item{nullH}{The hypothesis to be tested. The four options are: No_Effect, 
 Dominance, Location_Shift, and Exogeneity.}
 }
+\value{
+An ivqr_ks object which contains information regarding test statistics,
+critical value, sub-sampling block size, ...etc.
+}
 \description{
 General Inference
 Testing general hypothesis regarding the qunatile process of the endogenous
