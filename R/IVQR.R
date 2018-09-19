@@ -403,6 +403,28 @@ print.ivqr <- function(x, ...){
 	cat("\nCoefficients of exogenous variables:\n\n")
 	print(x$coef$exog_var)
 }
+
+#' @export
+plot.ivqr <- function(object, trim = c(0.05,0.95), variable = 1){
+	taus <- object$taus
+	tl <- which(taus >= trim[1])[1]
+	th <- which(taus <= trim[2])[length(which(taus < trim[2]))]
+	taus <- taus[tl:th]
+
+	coef <- object$coef$endg_var[variable,tl:th]
+	yname <- rownames(object$coef$endg_var)[variable]
+
+	se <- object$se[1,tl:th]
+	up_bdd <- coef + 1.96 * se
+	lw_bdd <- coef - 1.96 * se
+
+	plot(taus,coef, ylim = c(min(lw_bdd) - max(se),
+		max(up_bdd) + max(se)), type='n', xlab = "tau", ylab = yname)
+	polygon(c(taus, rev(taus)), c(up_bdd, rev(lw_bdd)), col = 'grey')
+	lines(taus,coef, ylim = c(min(lw_bdd) - max(se),
+		max(up_bdd) + max(se)))
+}
+
 #' @export
 summary.ivqr <- function(x, i = NULL, ...) {
 	d <- x$dim_d_d_k[1]
@@ -448,7 +470,7 @@ summary.ivqr <- function(x, i = NULL, ...) {
 #' data(ivqr_eg)
 #' fit <- ivqr(y ~ d | z | x, seq(0.1,0.9,0.1), grid = seq(-2,2,0.2), data = ivqr_eg) # a process
 #' weakIVtest(fit)
-#' print(fit)
+#' print(fit) # print the confidence region.
 #' @export
 weakIVtest <- function(object, size = 0.05){
 	grid <- object$grid
@@ -465,36 +487,23 @@ weakIVtest <- function(object, size = 0.05){
 	result$taus <- taus
 	result$yname <- rownames(object$coef$endg_var)[1]
 	class(result) <- "ivqr_weakIV"
+	warning("weakIVtest: CI can be not-convex")
 	plot.ivqr_weakIV(result)
+	return(result)
 }
 #' @export
-plot.ivqr_weakIV <- function(object){
-	warning("weakIVtest: CI can be not-convex")
+plot.ivqr_weakIV <- function(object){	
 	CI <- object$CI
 	taus <- object$taus
 	yname <- object$yname
 	plot(rep(taus,nrow(CI)), c(t(CI)), xlab = "tau", ylab = yname)
 }
-#' @export
-plot.ivqr <- function(object, trim = c(0.05,0.95), variable = 1){
-	taus <- object$taus
-	tl <- which(taus >= trim[1])[1]
-	th <- which(taus <= trim[2])[length(which(taus < trim[2]))]
-	taus <- taus[tl:th]
-
-	coef <- object$coef$endg_var[variable,tl:th]
-	yname <- rownames(object$coef$endg_var)[variable]
-
-	se <- object$se[1,tl:th]
-	up_bdd <- coef + 1.96 * se
-	lw_bdd <- coef - 1.96 * se
-
-	plot(taus,coef, ylim = c(min(lw_bdd) - max(se),
-		max(up_bdd) + max(se)), type='n', xlab = "tau", ylab = yname)
-	polygon(c(taus, rev(taus)), c(up_bdd, rev(lw_bdd)), col = 'grey')
-	lines(taus,coef, ylim = c(min(lw_bdd) - max(se),
-		max(up_bdd) + max(se)))
+#' @export 
+print.ivqr_weakIV <- function(x,...){
+	cat("\nBelow prints the confidence region of the endogenous variable. NA means the corresponding value (defined in the user-specified grid when calling ivqr()) is not in the confidence region. Note that CI can be not-convex.\n")
+	print(x$CI)
 }
+
 
 Suppress_Sol_not_Unique <-function(w) {
 	if( any( grepl( "Solution may be nonunique", w) ) ) invokeRestart( "muffleWarning" )
