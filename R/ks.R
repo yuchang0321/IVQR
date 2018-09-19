@@ -8,6 +8,8 @@
 #' @param trim A vector of two numbers indicating the lower and upper bounds 
 #' of the quantiles to consider.
 #' @param B Number of sub-sampling in the bootstrap. Default is 2000.
+#' @param size A vector indicates the desired size of the test. Critical values
+#' will be reported accordingly.
 #' @param nullH The hypothesis to be tested. The four options are: No_Effect, 
 #' Dominance, Location_Shift, and Exogeneity.
 #' @return An ivqr_ks object which contains information regarding test statistics,
@@ -20,8 +22,8 @@
 #' ivqr(fit,nullH=Location_Shift) # Test of location shift.
 #' ivqr(fit,nullH=Exogeneity) # Test of exogeneity.
 #' @export
-ivqr.ks <- function(object, variable = NULL, trim = c(0.05,0.95), B = 2000,  b_scale = 1,
-	nullH="No_Effect", ...){
+ivqr.ks <- function(object, variable = NULL, trim = c(0.05,0.95), B = 2000, 
+	size = c(0.1,0.05,0.01,0.001), nullH="No_Effect", ...){
 	if (any(object$error_tau_flag)) Stop("Error occurred for some tau. Re-specify taus
 		and run ivqr() again")
 	dim_d <- object$dim_d_d_k[1]
@@ -34,15 +36,15 @@ ivqr.ks <- function(object, variable = NULL, trim = c(0.05,0.95), B = 2000,  b_s
 	if (dim_d == 1 & is.null(variable)) variable = 1
 
 	ks <- switch(nullH,
-		No_Effect = ivqr.ks.no(object, trim, B, variable, b_scale),
-		Dominance = ivqr.ks.dom(object, trim, B, variable, b_scale),
-		Location_Shift = ivqr.ks.const(object, trim, B, variable, b_scale),
-		Exogeneity = ivqr.ks.exog(object, trim, B, variable, b_scale),
+		No_Effect = ivqr.ks.no(object, trim, B, variable, size),
+		Dominance = ivqr.ks.dom(object, trim, B, variable, size),
+		Location_Shift = ivqr.ks.const(object, trim, B, variable, size),
+		Exogeneity = ivqr.ks.exog(object, trim, B, variable, size),
 		"This test is not implemented")
 	return(ks)
 }
 
-ivqr.ks.no <- function(object, trim, B, variable, b_scale) {
+ivqr.ks.no <- function(object, trim, B, variable, size) {
 	taus <- object$taus
 	data <- object$data
 	coef <- object$coef
@@ -67,11 +69,11 @@ ivqr.ks.no <- function(object, trim, B, variable, b_scale) {
 
 	sd_z <- colMeans(Z ^ 2) ^ (1 / 2)
 
-	block_size <- as.integer(5 * n ^ (2/5)) * b_scale
+	block_size <- as.integer(5 * n ^ (2/5)) 
 	V <- matrix(NA, B, length(taus))
 	for (b in 1:B) {
 		resample_indexes <- sample(n, block_size, replace=FALSE)
-		V[b,] <- sum(Z[resample_indexes,]) / block_size
+		V[b,] <- colSums(Z[resample_indexes,]) / block_size
 	}
 
 	# Trim the extreme tails
@@ -79,7 +81,7 @@ ivqr.ks.no <- function(object, trim, B, variable, b_scale) {
 	th <- which(taus <= trim[2])[length(which(taus <= trim[2]))]
 	s <- block_size ^ (1 / 2) * apply(t(t(abs(V[,(tl:th)])) / sd_z[tl:th]), 1, max)
 	s <- as.vector(s)
-	critical_value <- c(quantile(s,0.90),quantile(s,0.95),quantile(s,0.99))
+	critical_value <- quantile(s,1 - size)
 
 	process <- rbind(coef$endg_var,coef$exog_var)[variable,(tl:th)]
 	process <- process / sd_z[tl:th]
@@ -96,7 +98,7 @@ ivqr.ks.no <- function(object, trim, B, variable, b_scale) {
 	return(ks)
 }
 
-ivqr.ks.dom <- function(object, trim, B, variable, b_scale) {
+ivqr.ks.dom <- function(object, trim, B, variable, size) {
 	taus <- object$taus
 	data <- object$data
 	coef <- object$coef
@@ -121,11 +123,11 @@ ivqr.ks.dom <- function(object, trim, B, variable, b_scale) {
 
 	sd_z <- colMeans(Z ^ 2) ^ (1 / 2)
 
-	block_size <- as.integer(5 * n ^ (2/5)) * b_scale
+	block_size <- as.integer(5 * n ^ (2/5))
 	V <- matrix(NA, B, length(taus))
 	for (b in 1:B) {
 		resample_indexes <- sample(n, block_size, replace=FALSE)
-		V[b,] <- sum(Z[resample_indexes,]) / block_size
+		V[b,] <- colSums(Z[resample_indexes,]) / block_size
 	}
 
 	# Trim the extreme tails
@@ -134,7 +136,7 @@ ivqr.ks.dom <- function(object, trim, B, variable, b_scale) {
 
 	s <- block_size ^ (1 / 2) * apply(t(t(abs(V[,(tl:th)])) / sd_z[tl:th]), 1, max)
 	s <- as.vector(s)
-	critical_value <- c(quantile(s,0.90),quantile(s,0.95),quantile(s,0.99))
+	critical_value <- quantile(s,1 - size)
 
 	process <- rbind(coef$endg_var,coef$exog_var)[variable,(tl:th)]
 	ks_stat <- max(max(-1 * process / sd_z[tl:th]), 0) * n ^ (1/2)
@@ -151,7 +153,7 @@ ivqr.ks.dom <- function(object, trim, B, variable, b_scale) {
 }
 
 
-ivqr.ks.const <- function(object, trim, B, variable, b_scale) {
+ivqr.ks.const <- function(object, trim, B, variable, size) {
 	taus <- object$taus
 	data <- object$copy_data
 	coef <- object$coef
@@ -192,12 +194,12 @@ ivqr.ks.const <- function(object, trim, B, variable, b_scale) {
 	}
 
 	sd_z <- colMeans(Z ^ 2) ^ (1 / 2)
-	block_size <- as.integer(5 * n ^ (2/5)) * b_scale
+	block_size <- as.integer(5 * n ^ (2/5)) 
 
 	V <- matrix(NA, B, length(taus))
 	for (b in 1:B) {
 		resample_indexes <- sample(n, block_size, replace=FALSE)
-		V[b,] <- sum(Z[resample_indexes,]) / block_size
+		V[b,] <- colSums(Z[resample_indexes,]) / block_size
 	}
 
 	# Trim the extreme tails cut out [1/2 - eps, 1/2 + eps]
@@ -210,7 +212,7 @@ ivqr.ks.const <- function(object, trim, B, variable, b_scale) {
 	s <- (block_size) ^ (1 / 2) * apply(t(t(abs(V[,indexes])) / sd_z[indexes]),1,max)
 	s <- as.vector(s)
 
-	critical_value <- c(quantile(s,0.90),quantile(s,0.95),quantile(s,0.99))
+	critical_value <- quantile(s,1 - size)
 
 	process <- rbind(coef$endg_var,coef$exog_var)[variable,indexes]
 
@@ -231,7 +233,7 @@ ivqr.ks.const <- function(object, trim, B, variable, b_scale) {
 	return(ks)
 }
 
-ivqr.ks.exog <- function(object, trim, B, variable, b_scale, bd_rule = "Silver") {
+ivqr.ks.exog <- function(object, trim, B, variable, size, bd_rule = "Silver") {
 	taus <- object$taus
 	data <- object$copy_data
 	coef <- object$coef
@@ -251,7 +253,7 @@ ivqr.ks.exog <- function(object, trim, B, variable, b_scale, bd_rule = "Silver")
 
 	formula_rq <- formula(Formula(formula), lhs = 1, rhs = c(1,3), collapse = TRUE)
 	fit_rq <- withCallingHandlers(
-			  	rq(formula_rq, tau = taus, data = data, method = qrMethod),
+			  	quantreg::rq(formula_rq, tau = taus, data = data, method = qrMethod),
 			  	warning = Suppress_Sol_not_Unique
 		  )
 
@@ -270,7 +272,7 @@ ivqr.ks.exog <- function(object, trim, B, variable, b_scale, bd_rule = "Silver")
 
 		e <- rq_residuals[,tau_index]
 		if ( bd_rule == "Silver" ) {
-			h <- 1.364 * ( (2*sqrt(pi)) ^ (-1/5) ) * std(e) * ( n ^ (-1/5) )
+			h <- 1.364 * ( (2*sqrt(pi)) ^ (-1/5) ) * sd(e) * ( n ^ (-1/5) )
 		}
 		kernel <- c(as.numeric( abs(e) < h ))
 
@@ -284,12 +286,12 @@ ivqr.ks.exog <- function(object, trim, B, variable, b_scale, bd_rule = "Silver")
 	}
 
 	sd_z <- colMeans(Z ^ 2) ^ (1 / 2)
-	block_size <- as.integer(5 * n ^ (2/5)) * b_scale
+	block_size <- as.integer(5 * n ^ (2/5))
 
 	V <- matrix(NA, B, length(taus))
 	for (b in 1:B) {
 		resample_indexes <- sample(n, block_size, replace=FALSE)
-		V[b,] <- sum(Z[resample_indexes,]) / block_size
+		V[b,] <- colSums(Z[resample_indexes,]) / block_size
 	}
 
 	# Trim the extreme tails cut out [1/2 - eps, 1/2 + eps]
@@ -299,7 +301,7 @@ ivqr.ks.exog <- function(object, trim, B, variable, b_scale, bd_rule = "Silver")
 	s <- block_size ^ (1 / 2) * apply(t(t(abs(V[,(tl:th)])) / sd_z[tl:th]), 1, max)
 	s <- as.vector(s)
 
-	critical_value <- c(quantile(s,0.90),quantile(s,0.95),quantile(s,0.99))
+	critical_value <- quantile(s,1 - size)
 	process <- rbind(
 		coef$endg_var - coef_rq[2:(1 + dim_d),],
 		coef$exog_var[1,] - coef_rq[1,],
