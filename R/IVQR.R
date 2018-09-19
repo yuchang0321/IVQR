@@ -524,7 +524,7 @@ Suppress_Sol_not_Unique <-function(w) {
 #' fit <- ivqr(y ~ d | z | x, c(0.25,0.5,0.75), grid = seq(-2,2,0.2), data = ivqr_eg)
 #' Diagnostic(fit,2) # Plot the objective function at the median.
 #' @export
-Diagnostic <- function(object, i, size = 0.05, trim = NULL, GMM_only = 0){
+Diagnostic <- function(object, i = 1, size = 0.05, trim = NULL, GMM_only = 0){
 	dim_d <- object$dim_d_d_k[1]
 	grid <- object$grid
 	dim_d <- object$dim_d_d_k[1]
@@ -555,7 +555,7 @@ Diagnostic <- function(object, i, size = 0.05, trim = NULL, GMM_only = 0){
 	# Plot the result from grid search
 	if (!GMM_only){
 		plot(grid[gl:gh], obj_fcn[gl:gh], type = 'l', col = "blue",
-			ylab = "Objective Function", xlab = "Grid")
+			ylab = "Objective Function", xlab = "Grid", main = paste0("Objective function at the ", taus[i],"-th quantile"))
 		abline(h = critical_value, col = "green")
 		legend("topright", legend = "Weak-IV Critical Value", col = "green", lty=1:2, cex=0.8)	
 	}
