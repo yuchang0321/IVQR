@@ -13,8 +13,9 @@ weakIVtest(object, size = 0.05)
 package quantreg.}
 }
 \value{
-An ivqr_weakIV object along with a plot that shows the confidence 
-region. It is also possible to print the confidence set by applying the method 
+An ivqr_weakIV object, which will be directly inputted into the method
+\code{plot.ivqr_weakIV()} to visualize the confidence 
+region. It is also possible to print the confidence region by applying the method 
 \code{print()} to the ivqr_weakIV object. 
 Note that the confidence region is not guaranteed to be convex.
 }
@@ -25,5 +26,5 @@ Weak-IV Robust Test
 data(ivqr_eg)
 fit <- ivqr(y ~ d | z | x, seq(0.1,0.9,0.1), grid = seq(-2,2,0.2), data = ivqr_eg) # a process
 weakIVtest(fit)
-print(fit)
+print(fit) # print the confidence region.
 }

@@ -14,11 +14,14 @@ contains number strictly between 0 and 1.}
 \item{data}{A data.frame in which to interpret the variables named in the 
 formula.}
 
-\item{grid}{A vector that specifies the grid for estimating the 
-coefficient of the endogenous variable. The grid should be reasonably large 
+\item{grid}{A vector (resp. list) when number of endogenous variable is one 
+(resp. two). 
+The grid should be reasonably large 
 and fine so that the objective function is properly minimized. 
+When there are two endogenous variables, the list should contain two vectors,
+each specifies a grid for one of the variables.
 Users are encouraged to try different grids and use the function 
-Diagnostic() to visually inspect the objective functions.}
+diagnose() to visually inspect the objective functions.}
 
 \item{gridMethod}{The type of grid search. In the current version,
 only the method "Default" is available, which is simply an exhaustive 
@@ -53,5 +56,11 @@ fit <- ivqr(y ~ d | z | x, 0.5, grid = seq(-2,2,0.2), data = ivqr_eg) # median
 fit <- ivqr(y ~ d | z | x, 0.25, grid = seq(-2,2,0.2), data = ivqr_eg) # the first quartile
 fit <- ivqr(y ~ d | z | x, seq(0.1,0.9,0.1), grid = seq(-2,2,0.2), data = ivqr_eg) # a process
 plot(fit) # plot the coefficients of the endogenous variable along with 95\% CI
+
+data(ivqr_eg2) # An example with two endogenous variables
+grid2 <- list(seq(-1,1,0.05),seq(1.5,2.5,0.05)) # Two grids
+fit <- ivqr(y ~ d1 + d2 | z1 + z2 | x, seq(0.1,0.9,0.1), grid = grid2, data = ivqr_eg2) # median
+plot(fit,1) # plot the coefficients of the first endogenous variable along with 95\% CI
+plot(fit,2) # plot the coefficients of the second endogenous variable along with 95\% CI
 summary(fit) # print the results
 }

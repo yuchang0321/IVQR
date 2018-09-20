@@ -8,11 +8,14 @@
 #' contains number strictly between 0 and 1.
 #' @param data A data.frame in which to interpret the variables named in the 
 #' formula.
-#' @param grid A vector that specifies the grid for estimating the 
-#' coefficient of the endogenous variable. The grid should be reasonably large 
+#' @param grid A vector (resp. list) when number of endogenous variable is one 
+#' (resp. two). 
+#' The grid should be reasonably large 
 #' and fine so that the objective function is properly minimized. 
+#' When there are two endogenous variables, the list should contain two vectors,
+#' each specifies a grid for one of the variables.
 #' Users are encouraged to try different grids and use the function 
-#' Diagnostic() to visually inspect the objective functions.
+#' diagnose() to visually inspect the objective functions.
 #' @param gridMethod The type of grid search. In the current version,
 #' only the method "Default" is available, which is simply an exhaustive 
 #' searching.
@@ -32,6 +35,12 @@
 #' fit <- ivqr(y ~ d | z | x, 0.25, grid = seq(-2,2,0.2), data = ivqr_eg) # the first quartile
 #' fit <- ivqr(y ~ d | z | x, seq(0.1,0.9,0.1), grid = seq(-2,2,0.2), data = ivqr_eg) # a process
 #' plot(fit) # plot the coefficients of the endogenous variable along with 95% CI
+#' 
+#' data(ivqr_eg2) # An example with two endogenous variables
+#' grid2 <- list(seq(-1,1,0.05),seq(1.5,2.5,0.05)) # Two grids
+#' fit <- ivqr(y ~ d1 + d2 | z1 + z2 | x, seq(0.1,0.9,0.1), grid = grid2, data = ivqr_eg2) # median
+#' plot(fit,1) # plot the coefficients of the first endogenous variable along with 95% CI
+#' plot(fit,2) # plot the coefficients of the second endogenous variable along with 95% CI
 #' summary(fit) # print the results
 #' @import Formula
 #' @export
@@ -125,22 +134,23 @@ ivqr <- function(formula, taus=0.5, data, grid, gridMethod="Default", ivqrMethod
 	# Check the provided grid has appropriate dim
 	if (ncol(D) == 1) {
 		if (!is.vector(grid)) {
-			stop("Dimension of the grid does not match the numbers of endogenous
-				variables. Grid should be a vector for dim(D) = 1")
-	} else if (ncol(D) == 2) { # Grid search on a square when dim(D) == 2
-		if (!is.matrix(grid) )
-			stop("Dimension of the grid does not match the number of endogenous
-				variables. Grid should be a matrix with 2 rows for dim(D) == 2")
-		} else if (ncol(D) >= 2) {
-			stop("Complexity grows exponentially in the number of endogenous
-				variables. This version only deals with cases when dim(D) <= 2")
+			stop("Dimension of the grid does not match the numbers of endogenous variables. Grid should be a vector for dim(D) = 1")
 		}
+	} else if (ncol(D) == 2) { # Grid search on a square when dim(D) == 2
+		if (!is.list(grid) )
+			stop("Dimension of the grid does not match the number of endogenous variables. Grid should be a matrix with 2 rows for dim(D) == 2")
+	} else if (ncol(D) >= 2) {
+			stop("Complexity grows exponentially in the number of endogenous variables. This version only deals with cases when dim(D) <= 2")
 	}
 	# ---
 
 	fitted <- matrix(NA,nrow(X),length(taus))
 	residuals <- matrix(NA,nrow(X),length(taus))
-	grid_value <- matrix(NA,length(grid),length(taus))
+	if (!is.list(grid)){
+		grid_value <- matrix(NA,length(grid),length(taus))
+	} else {
+		grid_value <- array(NA, dim = c(length(grid[[1]]),length(grid[[2]]),length(taus)))
+	}
 	error_tau_flag <- !logical(length(taus))
 	for (i in 1:length(taus)) {
 		# print(paste("Now at tau=",taus[i]))
@@ -158,7 +168,12 @@ ivqr <- function(formula, taus=0.5, data, grid, gridMethod="Default", ivqrMethod
 
 			residuals[,i] <- ivqr_est$residuals
 			fitted[,i] <- ivqr_est$fitted
-			grid_value[,i] <- ivqr_est$grid_value
+			
+			if (!is.list(grid)){
+				grid_value[,i] <- ivqr_est$grid_value
+			} else {
+				grid_value[,,i] <- ivqr_est$grid_value
+			}
 			error_tau_flag[i] <- FALSE
 		}
 	}
@@ -312,7 +327,7 @@ GetObjFcn <- function(iqr_formula, taus, data, qrMethod) {
 }
 
 GridSearch <- function(objFcn,tau,grid){
-	if (is.vector(grid)) {
+	if (!is.list(grid)) {
 		grid_value <- rep(NA,length(grid))
 		for (i in 1:length(grid)) {
 			grid_value[i] <- objFcn(tau,grid[i])
@@ -321,16 +336,24 @@ GridSearch <- function(objFcn,tau,grid){
 		output$coef_endg_var <- grid[which.min(abs(grid_value))]
 		output$grid_value <- grid_value
 		return(output)
-	} else if (is.matrix(grid)) {
-		grid_value <- marix(NA,length(grid[1,]),length(grid[2,]))
-		for (i in 1:length(grid[1])) {
-			for (j in 1:length(grid[2])) {
-				alpha <- c(grid[1,i],grid[2,i])
-				grid_value[i] <- objFcn(tau,alpha)
+	} else if (is.list(grid)) {
+		grid_value <- matrix(NA,length(grid[[1]]),length(grid[[2]]))
+		for (i in 1:length(grid[[1]])) {
+			for (j in 1:length(grid[[2]])) {
+				alpha <- c(grid[[1]][i],grid[[2]][j])
+				grid_value[i,j] <- objFcn(tau,alpha)
   			}
-			endg_var <- grid[which.min(abs(grid_value))]
-			return(endg_var)
-		}
+  		}
+		idx <- which.min(abs(grid_value))
+		row_idx <- idx %% length(grid[[1]])
+		if (row_idx == 0) row_idx <- length(grid[[1]])	
+		col_idx <- (idx - row_idx) / length(grid[[1]]) + 1
+
+		output <- list()
+		output$coef_endg_var <- c(grid[[1]][row_idx],grid[[2]][col_idx])
+		output$grid_value <- grid_value
+		return(output)
+		
 	}
 }
 
@@ -405,7 +428,7 @@ print.ivqr <- function(x, ...){
 }
 
 #' @export
-plot.ivqr <- function(object, trim = c(0.05,0.95), variable = 1){
+plot.ivqr <- function(object, variable = 1, trim = c(0.05,0.95), ...){
 	taus <- object$taus
 	tl <- which(taus >= trim[1])[1]
 	th <- which(taus <= trim[2])[length(which(taus < trim[2]))]
@@ -462,8 +485,9 @@ summary.ivqr <- function(x, i = NULL, ...) {
 #' @param object An ivqr object returned from the function \code{ivqr()}
 #' @param size the size of the test. Default is 0.05.
 #' package quantreg.
-#' @return An ivqr_weakIV object along with a plot that shows the confidence 
-#' region. It is also possible to print the confidence set by applying the method 
+#' @return An ivqr_weakIV object, which will be directly inputted into the method
+#' \code{plot.ivqr_weakIV()} to visualize the confidence 
+#' region. It is also possible to print the confidence region by applying the method 
 #' \code{print()} to the ivqr_weakIV object. 
 #' Note that the confidence region is not guaranteed to be convex.
 #' @examples 
@@ -491,13 +515,27 @@ weakIVtest <- function(object, size = 0.05){
 	plot.ivqr_weakIV(result)
 	return(result)
 }
+
+
+
+#' Visualizing the Weak-IV Robust Confidence Region
+#' @param object An ivqr_weakIV object returned from the function \code{weakIVtest()}
+#' @details This function will be called when evaluating \code{weakIVtest()}. 
+#' The case of two endogenous varaibles is not supported.
+#' @examples 
+#' data(ivqr_eg)
+#' fit <- ivqr(y ~ d | z | x, seq(0.1,0.9,0.1), grid = seq(-2,2,0.2), data = ivqr_eg) # a process
+#' plot(weakIVtest(fit))
 #' @export
-plot.ivqr_weakIV <- function(object){	
+plot.ivqr_weakIV <- function(object, ...){	
 	CI <- object$CI
 	taus <- object$taus
 	yname <- object$yname
 	plot(rep(taus,nrow(CI)), c(t(CI)), xlab = "tau", ylab = yname)
 }
+#' Printing the Weak-IV Robust Confidence Region
+#' @param x An ivqr_weakIV object returned from the function \code{weakIVtest()}
+#' @details The case of two endogenous varaibles is not supported.
 #' @export 
 print.ivqr_weakIV <- function(x,...){
 	cat("\nBelow prints the confidence region of the endogenous variable. NA means the corresponding value (defined in the user-specified grid when calling ivqr()) is not in the confidence region. Note that CI can be not-convex.\n")
@@ -522,9 +560,9 @@ Suppress_Sol_not_Unique <-function(w) {
 #' @examples 
 #' data(ivqr_eg)
 #' fit <- ivqr(y ~ d | z | x, c(0.25,0.5,0.75), grid = seq(-2,2,0.2), data = ivqr_eg)
-#' Diagnostic(fit,2) # Plot the objective function at the median.
+#' diagnose(fit,2) # Plot the objective function at the median.
 #' @export
-Diagnostic <- function(object, i = 1, size = 0.05, trim = NULL, GMM_only = 0){
+diagnose <- function(object, i = 1, size = 0.05, trim = NULL, GMM_only = 0){
 	dim_d <- object$dim_d_d_k[1]
 	grid <- object$grid
 	dim_d <- object$dim_d_d_k[1]
@@ -548,7 +586,7 @@ Diagnostic <- function(object, i = 1, size = 0.05, trim = NULL, GMM_only = 0){
 	critical_value <- qchisq((1 - size), dim_d)
 
 	if(length(i) > 1) {
-		warning("Multiple taus not allowed in Diagnostic: plot restricted to first element")
+		warning("Multiple taus not allowed in diagnose: plot restricted to first element")
 	}
 
 

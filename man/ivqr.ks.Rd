@@ -7,7 +7,7 @@ Testing general hypothesis regarding the qunatile process of the endogenous
 variable.}
 \usage{
 ivqr.ks(object, variable = NULL, trim = c(0.05, 0.95), B = 2000,
-  b_scale = 1, nullH = "No_Effect", ...)
+  size = c(0.1, 0.05, 0.01, 0.001), nullH = "No_Effect", ...)
 }
 \arguments{
 \item{object}{An ivqr object returned from the function \code{ivqr()}}
@@ -20,6 +20,9 @@ this argument should be either 1 or 2.}
 of the quantiles to consider.}
 
 \item{B}{Number of sub-sampling in the bootstrap. Default is 2000.}
+
+\item{size}{A vector indicates the desired size of the test. Critical values
+will be reported accordingly.}
 
 \item{nullH}{The hypothesis to be tested. The four options are: No_Effect, 
 Dominance, Location_Shift, and Exogeneity.}
