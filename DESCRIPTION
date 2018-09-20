@@ -1,19 +1,17 @@
 Package: IVQR
 Type: Package
 Title: IVQR: Instrumental Variable Quantile Regression
-Version: 0.1
-Depends: quantreg, Formula, matlab
-Date: 2017-09-06
-Author: Yu-Chang Chen and Kaspar Wuthrich
-Maintainer: Yu-Chang Chen <yuc391@ucsd.edu>
+Version: 0.1.0
+Imports: quantreg, Formula
+Date: 2018-09-16
+Authors@R: person("Yu-Chang", "Chen", email = "yuc391@ucsd.edu",
+    role = c("aut", "cre"))
 Description: Implmentation of instrument variable quantile regression framework. This includes
-  estimation (Chernozukov and Hansen 2006), direct and general inference (Chernozukov and Hansen 2006), and
-  weak IV robust test (Chernozukov and Hansen 2008).
+    estimation (Chernozukov and Hansen 2006), direct and general inference (Chernozukov and Hansen 2006), and
+    weak IV robust test (Chernozukov and Hansen 2008).
 License: GPL-2
-LazyData: TRUE
-Suggests: knitr,
-    rmarkdown
+LazyData: true
 VignetteBuilder: knitr
 URL: https://github.com/yuchang0321/IVQR
 BugReports: https://github.com/yuchang0321/IVQR/issues
-
+RoxygenNote: 6.1.0
