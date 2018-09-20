@@ -511,7 +511,8 @@ weakIVtest <- function(object, size = 0.05){
 	result$taus <- taus
 	result$yname <- rownames(object$coef$endg_var)[1]
 	class(result) <- "ivqr_weakIV"
-	warning("weakIVtest: CI can be not-convex")
+	warning("weakIVtest: CI can be not-convex. Also, it the dots hits the boundary, the grid used in ivqr() should be widened")
+
 	plot.ivqr_weakIV(result)
 	return(result)
 }
@@ -562,8 +563,9 @@ Suppress_Sol_not_Unique <-function(w) {
 #' fit <- ivqr(y ~ d | z | x, c(0.25,0.5,0.75), grid = seq(-2,2,0.2), data = ivqr_eg)
 #' diagnose(fit,2) # Plot the objective function at the median.
 #' @export
-diagnose <- function(object, i = 1, size = 0.05, trim = NULL, GMM_only = 0){
+diagnose <- function(object, i = 1, size = 0.05, trim = NULL, GMM_only = 0){	
 	dim_d <- object$dim_d_d_k[1]
+	if (dim_d > 1) stop("diagnose() is only implented for single endogenous variable")
 	grid <- object$grid
 	dim_d <- object$dim_d_d_k[1]
 	obj_fcn <- object$obj_fcn[,i]
@@ -582,7 +584,6 @@ diagnose <- function(object, i = 1, size = 0.05, trim = NULL, GMM_only = 0){
 		gl <- 1
 		gh <- length(grid)
 	}
-	if (dim_d > 1) stop("weakIVtest() is only implented for single endogenous variable")
 	critical_value <- qchisq((1 - size), dim_d)
 
 	if(length(i) > 1) {
