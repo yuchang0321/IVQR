@@ -419,6 +419,12 @@ ivqr.vc <- function(object, covariance, bd_rule="Silver", h_multi = 1) {
 	return(vc)
 }
 
+#' Printing the model fit from \code{ivqr()}
+#' @param object An ivqr object returned from the function \code{ivqr()}
+#' @examples 
+#' data(ivqr_eg)
+#' fit <- ivqr(y ~ d | z | x, seq(0.1,0.9,0.1), grid = seq(-2,2,0.2), data = ivqr_eg) # a process
+#' fit
 #' @export
 print.ivqr <- function(x, ...){
 	cat("\nCoefficients of endogenous variables:\n\n")
@@ -427,8 +433,24 @@ print.ivqr <- function(x, ...){
 	print(x$coef$exog_var)
 }
 
+#' Visualizing the quantile process of the endogenous variable
+#' @param object An ivqr object returned from the function \code{ivqr()}
+#' @param variable A number indicates which endogenous variable to test. Since 
+#' at most two endongenous variables can be included in the function \code{ivqr},
+#' this argument should be either 1 or 2.
+#' @param size A number indicating the desired size of the point-wise 
+#' confident inverval.
+#' @param trim A vector which representss an inverval. 
+#' Extreme quantile(s) outside the interval will not be shown in the plot.
+#' @variable A number indicating which endogenous variable to inspect. As
+#' no more than two endogenous variables can be included, the argument 
+#' variable should be either 1 or 2.
+#' @examples 
+#' data(ivqr_eg)
+#' fit <- ivqr(y ~ d | z | x, seq(0.1,0.9,0.1), grid = seq(-2,2,0.2), data = ivqr_eg) # a process
+#' plot(fit)
 #' @export
-plot.ivqr <- function(object, variable = 1, trim = c(0.05,0.95), ...){
+plot.ivqr <- function(object, variable = 1, size = 0.95,trim = c(0.05,0.95), ...){
 	taus <- object$taus
 	tl <- which(taus >= trim[1])[1]
 	th <- which(taus <= trim[2])[length(which(taus < trim[2]))]
@@ -438,8 +460,9 @@ plot.ivqr <- function(object, variable = 1, trim = c(0.05,0.95), ...){
 	yname <- rownames(object$coef$endg_var)[variable]
 
 	se <- object$se[1,tl:th]
-	up_bdd <- coef + 1.96 * se
-	lw_bdd <- coef - 1.96 * se
+	critical_value <- qnorm(1 - (1 - size)/2)
+	up_bdd <- coef + critical_value * se
+	lw_bdd <- coef - critical_value * se
 
 	plot(taus,coef, ylim = c(min(lw_bdd) - max(se),
 		max(up_bdd) + max(se)), type='n', xlab = "tau", ylab = yname)
@@ -448,6 +471,12 @@ plot.ivqr <- function(object, variable = 1, trim = c(0.05,0.95), ...){
 		max(up_bdd) + max(se)))
 }
 
+#' Summarizing the model fit returned from ivqr()
+#' @param object An ivqr object returned from the function \code{ivqr()}
+#' @examples 
+#' data(ivqr_eg)
+#' fit <- ivqr(y ~ d | z | x, seq(0.1,0.9,0.1), grid = seq(-2,2,0.2), data = ivqr_eg) # a process
+#' summary(fit)
 #' @export
 summary.ivqr <- function(x, i = NULL, ...) {
 	d <- x$dim_d_d_k[1]
@@ -481,9 +510,9 @@ summary.ivqr <- function(x, i = NULL, ...) {
 	}
 }
 
-#' Weak-IV Robust Test
+#' Weak-IV robust test
 #' @param object An ivqr object returned from the function \code{ivqr()}
-#' @param size the size of the test. Default is 0.05.
+#' @param size A number indicating the size of the test. Default is 0.05.
 #' package quantreg.
 #' @return An ivqr_weakIV object, which will be directly inputted into the method
 #' \code{plot.ivqr_weakIV()} to visualize the confidence 
@@ -514,7 +543,7 @@ weakIVtest <- function(object, size = 0.05){
 	warning("weakIVtest: CI can be not-convex. Also, it the dots hits the boundary, the grid used in ivqr() should be widened")
 
 	plot.ivqr_weakIV(result)
-	return(result)
+	invisible(result)
 }
 
 
