@@ -450,7 +450,7 @@ print.ivqr <- function(x, ...){
 #' fit <- ivqr(y ~ d | z | x, seq(0.1,0.9,0.1), grid = seq(-2,2,0.2), data = ivqr_eg) # a process
 #' plot(fit)
 #' @export
-plot.ivqr <- function(object, variable = 1, size = 0.95,trim = c(0.05,0.95), ...){
+plot.ivqr <- function(object, variable = 1, size = 0.05,trim = c(0.05,0.95), ...){
 	taus <- object$taus
 	tl <- which(taus >= trim[1])[1]
 	th <- which(taus <= trim[2])[length(which(taus < trim[2]))]
@@ -460,7 +460,7 @@ plot.ivqr <- function(object, variable = 1, size = 0.95,trim = c(0.05,0.95), ...
 	yname <- rownames(object$coef$endg_var)[variable]
 
 	se <- object$se[1,tl:th]
-	critical_value <- qnorm(1 - (1 - size)/2)
+	critical_value <- qnorm(1 - size / 2)
 	up_bdd <- coef + critical_value * se
 	lw_bdd <- coef - critical_value * se
 
