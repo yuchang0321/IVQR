@@ -10,10 +10,12 @@
 #' @param B Number of sub-sampling in the bootstrap. Default is 2000.
 #' @param size A vector indicates the desired size of the test. Critical values
 #' will be reported accordingly.
-#' @param nullH The hypothesis to be tested. The four options are: No_Effect, 
-#' Dominance, Location_Shift, and Exogeneity.
+#' @param nullH The null hypothesis to test. The four options are: No_Effect, 
+#' Dominance, Location_Shift, and Exogeneity as defined in 
+#' Chernozhukov and Hansen  (2006).
 #' @return An ivqr_ks object which contains information regarding test statistics,
 #' critical value, sub-sampling block size, ...etc.
+#' @references Chernozhukov, V., & Hansen, C. (2006). Instrumental quantile regression inference for structural and treatment effect models. Journal of Econometrics, 132(2), 491-525.
 #' @examples 
 #' data(ivqr_eg)
 #' fit <- ivqr(y ~ d | z | x, seq(0.15,0.85,0.02), grid = seq(-2,2,0.2), data = ivqr_eg) # taus should be a fine grid 

@@ -46,6 +46,14 @@ An ivqr object. Use functions such as summary() or plot() to see
 the coefficient estimates and standard errors. Weak-IV robust inference and 
 general inferences are implemented respectively by the fucntions 
 \code{weakIVtest()} and \code{ivqr.ks()}.
+An object of class "ivqr" is a list containing at least the following components:
+\itemize{
+	\item \strong{coef} a list containing the coefficients
+	\item \strong{fitted} a matrix of the fitted quantiles. The matrix is indexed by observations (row) and quantiles (column)
+	\item \strong{residuals} a matrix of residuals  The matrix is indexed by observations (row) and quantiles (column)
+	\item \strong{se} a matrix containing the standard errors. The matrix is indexed by variables (row) and quantiles (column)
+	\item \strong{vc} a three dimensional list containing the covariance matrix. The list is indexed by (variable, variable, quantile).
+}
 }
 \description{
 Instrumental Variable Qauntile Regression

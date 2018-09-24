@@ -29,6 +29,16 @@
 #' the coefficient estimates and standard errors. Weak-IV robust inference and 
 #' general inferences are implemented respectively by the fucntions 
 #' \code{weakIVtest()} and \code{ivqr.ks()}.
+
+#' An object of class "ivqr" is a list containing at least the following components:
+#' \itemize{
+#' 	\item \strong{coef} a list containing the coefficients
+#' 	\item \strong{fitted} a matrix of the fitted quantiles. The matrix is indexed by observations (row) and quantiles (column)
+#' 	\item \strong{residuals} a matrix of residuals  The matrix is indexed by observations (row) and quantiles (column)
+#' 	\item \strong{se} a matrix containing the standard errors. The matrix is indexed by variables (row) and quantiles (column)
+#' 	\item \strong{vc} a three dimensional list containing the covariance matrix. The list is indexed by (variable, variable, quantile).
+#' }
+
 #' @examples
 #' data(ivqr_eg)
 #' fit <- ivqr(y ~ d | z | x, 0.5, grid = seq(-2,2,0.2), data = ivqr_eg) # median
@@ -465,7 +475,8 @@ plot.ivqr <- function(object, variable = 1, size = 0.05,trim = c(0.05,0.95), ...
 	lw_bdd <- coef - critical_value * se
 
 	plot(taus,coef, ylim = c(min(lw_bdd) - max(se),
-		max(up_bdd) + max(se)), type='n', xlab = "tau", ylab = yname)
+		max(up_bdd) + max(se)), type='n', xlab = "tau", ylab = yname,
+		main = "The quantile process of the endogenous variable")
 	polygon(c(taus, rev(taus)), c(up_bdd, rev(lw_bdd)), col = 'grey')
 	lines(taus,coef, ylim = c(min(lw_bdd) - max(se),
 		max(up_bdd) + max(se)))
@@ -561,7 +572,8 @@ plot.ivqr_weakIV <- function(object, ...){
 	CI <- object$CI
 	taus <- object$taus
 	yname <- object$yname
-	plot(rep(taus,nrow(CI)), c(t(CI)), xlab = "tau", ylab = yname)
+	plot(rep(taus,nrow(CI)), c(t(CI)), xlab = "quantile", ylab = yname,
+		main = "The weak-IV robust confidence region")
 }
 #' Printing the Weak-IV Robust Confidence Region
 #' @param x An ivqr_weakIV object returned from the function \code{weakIVtest()}
@@ -623,7 +635,8 @@ diagnose <- function(object, i = 1, size = 0.05, trim = NULL, GMM_only = 0){
 	# Plot the result from grid search
 	if (!GMM_only){
 		plot(grid[gl:gh], obj_fcn[gl:gh], type = 'l', col = "blue",
-			ylab = "Objective Function", xlab = "Grid", main = paste0("Objective function at the ", taus[i],"-th quantile"))
+			ylab = "Objective Function", xlab = "Grid for estimating the endogenous variable",
+			main = paste0("Objective function at the ", taus[i],"-th quantile"))
 		abline(h = critical_value, col = "green")
 		legend("topright", legend = "Weak-IV Critical Value", col = "green", lty=1:2, cex=0.8)	
 	}

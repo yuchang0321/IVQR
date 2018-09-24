@@ -24,8 +24,9 @@ of the quantiles to consider.}
 \item{size}{A vector indicates the desired size of the test. Critical values
 will be reported accordingly.}
 
-\item{nullH}{The hypothesis to be tested. The four options are: No_Effect, 
-Dominance, Location_Shift, and Exogeneity.}
+\item{nullH}{The null hypothesis to test. The four options are: No_Effect, 
+Dominance, Location_Shift, and Exogeneity as defined in 
+Chernozhukov and Hansen  (2006).}
 }
 \value{
 An ivqr_ks object which contains information regarding test statistics,
@@ -43,4 +44,7 @@ ivqr(fit,nullH=No_Effect) # Test of no effect.
 ivqr(fit,nullH=Dominance) # Test of dominance.
 ivqr(fit,nullH=Location_Shift) # Test of location shift.
 ivqr(fit,nullH=Exogeneity) # Test of exogeneity.
+}
+\references{
+Chernozhukov, V., & Hansen, C. (2006). Instrumental quantile regression inference for structural and treatment effect models. Journal of Econometrics, 132(2), 491-525.
 }

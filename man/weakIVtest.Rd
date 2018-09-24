@@ -2,14 +2,14 @@
 % Please edit documentation in R/IVQR.R
 \name{weakIVtest}
 \alias{weakIVtest}
-\title{Weak-IV Robust Test}
+\title{Weak-IV robust test}
 \usage{
 weakIVtest(object, size = 0.05)
 }
 \arguments{
 \item{object}{An ivqr object returned from the function \code{ivqr()}}
 
-\item{size}{the size of the test. Default is 0.05.
+\item{size}{A number indicating the size of the test. Default is 0.05.
 package quantreg.}
 }
 \value{
@@ -20,7 +20,7 @@ region. It is also possible to print the confidence region by applying the metho
 Note that the confidence region is not guaranteed to be convex.
 }
 \description{
-Weak-IV Robust Test
+Weak-IV robust test
 }
 \examples{
 data(ivqr_eg)

@@ -1,7 +1,0 @@
-name: Publish Document
-account: rpubs
-server: rpubs.com
-bundleId:
-        https://api.rpubs.com/api/v1/document/308014/42c6ad4ab3a445d9a0efe39671f05e95
-url: http://rpubs.com/ycchen0321/308014
-when: 1505414546.6896
