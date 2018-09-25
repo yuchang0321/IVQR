@@ -1,5 +1,5 @@
 # IVQR
 Instrumental Variable Quantile Regression
 
-Please see the demo here:
-https://www.dropbox.com/s/yvm6lhr6ft36hu7/ivqr_demo.pdf?dl=0
+Please find a demonstration of the package below:
+https://www.dropbox.com/s/j4fzlksgdpyznyu/ivqr_demo.pdf?dl=0
