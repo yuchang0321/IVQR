@@ -1,33 +1,33 @@
 #' Instrumental Variable Qauntile Regression
-#' @param fomula A Formula (not the built-in formula) object. A correct model 
+#' @param fomula A Formula (not the built-in formula) object. A correct model
 #' specificaion should look like y ~ d | z | x, where y is the outcome variable,
-#' d is the endogenous variable, z is the instrument, and x is the control 
+#' d is the endogenous variable, z is the instrument, and x is the control
 #' variable'. If no control is needed, write y ~ d | z | 1. Constant has to be
 #' included, and number of endogenous variable should be no more than two.
-#' @param taus The quantile(s) to be estimated, which should be a vector that 
+#' @param taus The quantile(s) to be estimated, which should be a vector that
 #' contains number strictly between 0 and 1.
-#' @param data A data.frame in which to interpret the variables named in the 
+#' @param data A data.frame in which to interpret the variables named in the
 #' formula.
-#' @param grid A vector (resp. list) when number of endogenous variable is one 
-#' (resp. two). 
-#' The grid should be reasonably large 
-#' and fine so that the objective function is properly minimized. 
+#' @param grid A vector (resp. list) when number of endogenous variable is one
+#' (resp. two).
+#' The grid should be reasonably large
+#' and fine so that the objective function is properly minimized.
 #' When there are two endogenous variables, the list should contain two vectors,
 #' each specifies a grid for one of the variables.
-#' Users are encouraged to try different grids and use the function 
+#' Users are encouraged to try different grids and use the function
 #' diagnose() to visually inspect the objective functions.
 #' @param gridMethod The type of grid search. In the current version,
-#' only the method "Default" is available, which is simply an exhaustive 
+#' only the method "Default" is available, which is simply an exhaustive
 #' searching.
 #' @param ivqrMethod The algorithm to compute the fit. In the current version,
 #' only the "iqr" (instrumental quantile regression) algorithm is available.
 #' @param qrMethod The algorithmic method used in the (conventional) quantile
 #' regression, which is part of the instrumental quantile regression algorithm.
-#' For more information, see the help file of function \code{rq()} from the 
+#' For more information, see the help file of function \code{rq()} from the
 #' package quantreg.
 #' @return An ivqr object. Use functions such as summary() or plot() to see
-#' the coefficient estimates and standard errors. Weak-IV robust inference and 
-#' general inferences are implemented respectively by the fucntions 
+#' the coefficient estimates and standard errors. Weak-IV robust inference and
+#' general inferences are implemented respectively by the fucntions
 #' \code{weakIVtest()} and \code{ivqr.ks()}.
 
 #' An object of class "ivqr" is a list containing at least the following components:
@@ -45,7 +45,7 @@
 #' fit <- ivqr(y ~ d | z | x, 0.25, grid = seq(-2,2,0.2), data = ivqr_eg) # the first quartile
 #' fit <- ivqr(y ~ d | z | x, seq(0.1,0.9,0.1), grid = seq(-2,2,0.2), data = ivqr_eg) # a process
 #' plot(fit) # plot the coefficients of the endogenous variable along with 95% CI
-#' 
+#'
 #' data(ivqr_eg2) # An example with two endogenous variables
 #' grid2 <- list(seq(-1,1,0.05),seq(1.5,2.5,0.05)) # Two grids
 #' fit <- ivqr(y ~ d1 + d2 | z1 + z2 | x, seq(0.1,0.9,0.1), grid = grid2, data = ivqr_eg2) # median
@@ -178,7 +178,7 @@ ivqr <- function(formula, taus=0.5, data, grid, gridMethod="Default", ivqrMethod
 
 			residuals[,i] <- ivqr_est$residuals
 			fitted[,i] <- ivqr_est$fitted
-			
+
 			if (!is.list(grid)){
 				grid_value[,i] <- ivqr_est$grid_value
 			} else {
@@ -283,11 +283,11 @@ ivqr.fit.iqr <- function(iqr_formula, tau, data, grid, gridMethod, qrMethod){
 
 	#coef_exog_var <- c(fit_rq$coef[1])
 	if(length(fit_rq$coef) >= (2 + dim_inst_var)){
-		coef_exog_var <- c(fit_rq$coef[1],fit_rq$coef[(2 + dim_inst_var) : length(fit_rq$coef)])	
+		coef_exog_var <- c(fit_rq$coef[1],fit_rq$coef[(2 + dim_inst_var) : length(fit_rq$coef)])
 	} else {
 		coef_exog_var <- c(fit_rq$coef[1])
 	}
-	
+
 	coef_inst_var <- fit_rq$coef[2 : (2 + dim_inst_var - 1)]
 	fitted <- D %*% coef_endg_var + X %*% coef_exog_var
 	residuals <- Y - fitted
@@ -356,14 +356,14 @@ GridSearch <- function(objFcn,tau,grid){
   		}
 		idx <- which.min(abs(grid_value))
 		row_idx <- idx %% length(grid[[1]])
-		if (row_idx == 0) row_idx <- length(grid[[1]])	
+		if (row_idx == 0) row_idx <- length(grid[[1]])
 		col_idx <- (idx - row_idx) / length(grid[[1]]) + 1
 
 		output <- list()
 		output$coef_endg_var <- c(grid[[1]][row_idx],grid[[2]][col_idx])
 		output$grid_value <- grid_value
 		return(output)
-		
+
 	}
 }
 
@@ -381,7 +381,7 @@ ivqr.vc <- function(object, covariance, bd_rule="Silver", h_multi = 1) {
 	cov_mats <- array(NA,dim = c(kd,kd,length(taus)))
 	J_array <- array(NA,dim = c(kd,kd,length(taus)))
 
-	Check_Invertible <- function(m) class(try(solve(m),silent=T))=="matrix"
+	Check_Invertible <- function(m) "matrix" %in% class(try(solve(m),silent=TRUE))
 
 	for (tau_index in 1:length(taus)){
 		while (error_tau_flag[tau_index] & tau_index < length(taus)){
@@ -431,7 +431,7 @@ ivqr.vc <- function(object, covariance, bd_rule="Silver", h_multi = 1) {
 
 #' Printing the model fit from \code{ivqr()}
 #' @param object An ivqr object returned from the function \code{ivqr()}
-#' @examples 
+#' @examples
 #' data(ivqr_eg)
 #' fit <- ivqr(y ~ d | z | x, seq(0.1,0.9,0.1), grid = seq(-2,2,0.2), data = ivqr_eg) # a process
 #' fit
@@ -445,17 +445,17 @@ print.ivqr <- function(x, ...){
 
 #' Visualizing the quantile process of the endogenous variable
 #' @param object An ivqr object returned from the function \code{ivqr()}
-#' @param variable A number indicates which endogenous variable to test. Since 
+#' @param variable A number indicates which endogenous variable to test. Since
 #' at most two endongenous variables can be included in the function \code{ivqr},
 #' this argument should be either 1 or 2.
-#' @param size A number indicating the desired size of the point-wise 
+#' @param size A number indicating the desired size of the point-wise
 #' confident inverval.
-#' @param trim A vector which representss an inverval. 
+#' @param trim A vector which representss an inverval.
 #' Extreme quantile(s) outside the interval will not be shown in the plot.
 #' @variable A number indicating which endogenous variable to inspect. As
-#' no more than two endogenous variables can be included, the argument 
+#' no more than two endogenous variables can be included, the argument
 #' variable should be either 1 or 2.
-#' @examples 
+#' @examples
 #' data(ivqr_eg)
 #' fit <- ivqr(y ~ d | z | x, seq(0.1,0.9,0.1), grid = seq(-2,2,0.2), data = ivqr_eg) # a process
 #' plot(fit)
@@ -484,7 +484,7 @@ plot.ivqr <- function(object, variable = 1, size = 0.05,trim = c(0.05,0.95), ...
 
 #' Summarizing the model fit returned from ivqr()
 #' @param object An ivqr object returned from the function \code{ivqr()}
-#' @examples 
+#' @examples
 #' data(ivqr_eg)
 #' fit <- ivqr(y ~ d | z | x, seq(0.1,0.9,0.1), grid = seq(-2,2,0.2), data = ivqr_eg) # a process
 #' summary(fit)
@@ -501,7 +501,7 @@ summary.ivqr <- function(x, i = NULL, ...) {
 	# }
 
 	if(!is.null(i)){
-		start <- end <- i 
+		start <- end <- i
 	} else{
 		start <- 1
 		end <- length(taus)
@@ -526,11 +526,11 @@ summary.ivqr <- function(x, i = NULL, ...) {
 #' @param size A number indicating the size of the test. Default is 0.05.
 #' package quantreg.
 #' @return An ivqr_weakIV object, which will be directly inputted into the method
-#' \code{plot.ivqr_weakIV()} to visualize the confidence 
-#' region. It is also possible to print the confidence region by applying the method 
-#' \code{print()} to the ivqr_weakIV object. 
+#' \code{plot.ivqr_weakIV()} to visualize the confidence
+#' region. It is also possible to print the confidence region by applying the method
+#' \code{print()} to the ivqr_weakIV object.
 #' Note that the confidence region is not guaranteed to be convex.
-#' @examples 
+#' @examples
 #' data(ivqr_eg)
 #' fit <- ivqr(y ~ d | z | x, seq(0.1,0.9,0.1), grid = seq(-2,2,0.2), data = ivqr_eg) # a process
 #' weakIVtest(fit)
@@ -561,14 +561,14 @@ weakIVtest <- function(object, size = 0.05){
 
 #' Visualizing the Weak-IV Robust Confidence Region
 #' @param object An ivqr_weakIV object returned from the function \code{weakIVtest()}
-#' @details This function will be called when evaluating \code{weakIVtest()}. 
+#' @details This function will be called when evaluating \code{weakIVtest()}.
 #' The case of two endogenous varaibles is not supported.
-#' @examples 
+#' @examples
 #' data(ivqr_eg)
 #' fit <- ivqr(y ~ d | z | x, seq(0.1,0.9,0.1), grid = seq(-2,2,0.2), data = ivqr_eg) # a process
 #' plot(weakIVtest(fit))
 #' @export
-plot.ivqr_weakIV <- function(object, ...){	
+plot.ivqr_weakIV <- function(object, ...){
 	CI <- object$CI
 	taus <- object$taus
 	yname <- object$yname
@@ -578,7 +578,7 @@ plot.ivqr_weakIV <- function(object, ...){
 #' Printing the Weak-IV Robust Confidence Region
 #' @param x An ivqr_weakIV object returned from the function \code{weakIVtest()}
 #' @details The case of two endogenous varaibles is not supported.
-#' @export 
+#' @export
 print.ivqr_weakIV <- function(x,...){
 	cat("\nBelow prints the confidence region of the endogenous variable. NA means the corresponding value (defined in the user-specified grid when calling ivqr()) is not in the confidence region. Note that CI can be not-convex.\n")
 	print(x$CI)
@@ -595,16 +595,16 @@ Suppress_Sol_not_Unique <-function(w) {
 #' argument \code{taus = c(0.25,0.5,0.75)} was used as an input of \code{ivqr()}
 #' , specify \code{i=2} for the median.
 #' @param size the size of the test. Default is 0.05.
-#' @param trim a vector of two number indicating the lower and upper bounds 
+#' @param trim a vector of two number indicating the lower and upper bounds
 #' of the quantiles to inspect.
 #' @return A plot of the objective function as well as the (asymptotical) first
 #' order conditions evaluated at the coefficient estimates.
-#' @examples 
+#' @examples
 #' data(ivqr_eg)
 #' fit <- ivqr(y ~ d | z | x, c(0.25,0.5,0.75), grid = seq(-2,2,0.2), data = ivqr_eg)
 #' diagnose(fit,2) # Plot the objective function at the median.
 #' @export
-diagnose <- function(object, i = 1, size = 0.05, trim = NULL, GMM_only = 0){	
+diagnose <- function(object, i = 1, size = 0.05, trim = NULL, GMM_only = 0){
 	dim_d <- object$dim_d_d_k[1]
 	if (dim_d > 1) stop("diagnose() is only implented for single endogenous variable")
 	grid <- object$grid
@@ -638,13 +638,13 @@ diagnose <- function(object, i = 1, size = 0.05, trim = NULL, GMM_only = 0){
 			ylab = "Objective Function", xlab = "Grid for estimating the endogenous variable",
 			main = paste0("Objective function at the ", taus[i],"-th quantile"))
 		abline(h = critical_value, col = "green")
-		legend("topright", legend = "Weak-IV Critical Value", col = "green", lty=1:2, cex=0.8)	
+		legend("topright", legend = "Weak-IV Critical Value", col = "green", lty=1:2, cex=0.8)
 	}
-	
+
 	# Calculate the GMM FOC
 	L <- rep(taus[i],n) - as.numeric(residuals[,i] < 0)
 	GMM_criterion <- rowSums(L * t(PSI))
 	print(paste("At tau=", taus[i], "GMM FOC has values:"))
 	print("(These values should be closed to zero asymptotically)")
 	print(cbind(GMM_criterion/(sqrt(n))))
-}	
+}
